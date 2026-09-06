@@ -1,0 +1,148 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    depends_on:
+      - api-gateway
+
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3001
+      PATIENTS_SERVICE_URL: http://patients-service:3002
+      APPOINTMENTS_SERVICE_URL: http://appointments-service:3003
+      ODONTOGRAM_SERVICE_URL: http://odontogram-service:3004
+      BILLING_SERVICE_URL: http://billing-service:3005
+    depends_on:
+      - auth-service
+      - patients-service
+      - appointments-service
+      - odontogram-service
+      - billing-service
+
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgres://auth_user:auth_pass@auth-db:5432/auth_db
+      JWT_SECRET: dev_secret_change_me
+    depends_on:
+      - auth-db
+
+  patients-service:
+    build: ./services/patients-service
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DATABASE_URL: postgres://patients_user:patients_pass@patients-db:5432/patients_db
+    depends_on:
+      - patients-db
+
+  appointments-service:
+    build: ./services/appointments-service
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgres://appointments_user:appointments_pass@appointments-db:5432/appointments_db
+    depends_on:
+      - appointments-db
+
+  odontogram-service:
+    build: ./services/odontogram-service
+    ports:
+      - "3004:3004"
+    environment:
+      PORT: 3004
+      DATABASE_URL: postgres://odontogram_user:odontogram_pass@odontogram-db:5432/odontogram_db
+    depends_on:
+      - odontogram-db
+
+  billing-service:
+    build: ./services/billing-service
+    ports:
+      - "3005:3005"
+    environment:
+      PORT: 3005
+      DATABASE_URL: postgres://billing_user:billing_pass@billing-db:5432/billing_db
+    depends_on:
+      - billing-db
+
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: auth_user
+      POSTGRES_PASSWORD: auth_pass
+      POSTGRES_DB: auth_db
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+
+  patients-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: patients_user
+      POSTGRES_PASSWORD: patients_pass
+      POSTGRES_DB: patients_db
+    volumes:
+      - patients-data:/var/lib/postgresql/data
+
+  appointments-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appointments_user
+      POSTGRES_PASSWORD: appointments_pass
+      POSTGRES_DB: appointments_db
+    volumes:
+      - appointments-data:/var/lib/postgresql/data
+
+  odontogram-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: odontogram_user
+      POSTGRES_PASSWORD: odontogram_pass
+      POSTGRES_DB: odontogram_db
+    volumes:
+      - odontogram-data:/var/lib/postgresql/data
+
+  billing-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: billing_user
+      POSTGRES_PASSWORD: billing_pass
+      POSTGRES_DB: billing_db
+    volumes:
+      - billing-data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2026-08-30T00-00-00Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  auth-data:
+  patients-data:
+  appointments-data:
+  odontogram-data:
+  billing-data:
+  minio-data:
