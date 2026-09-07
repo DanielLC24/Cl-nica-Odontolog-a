@@ -10,11 +10,19 @@
   box-sizing: border-box;
 }
 
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  min-height: 100vh;
+}
+
 body {
   margin: 0;
+  background: #eef3f8;
 }
 
 button,
+input,
 select {
   font: inherit;
 }
@@ -35,6 +43,107 @@ select {
   border-radius: 8px;
   background: #ffffff;
   padding: 0 12px;
+}
+
+input {
+  min-height: 42px;
+  border: 1px solid #d7dde8;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0 12px;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #dff3f2 0%, #edf4ff 100%);
+  padding: 24px;
+}
+
+.login-card {
+  width: min(100%, 440px);
+  background: #ffffff;
+  border: 1px solid #dfe5ef;
+  border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  padding: 28px;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  color: #10233f;
+}
+
+.login-brand strong,
+.login-brand span {
+  display: block;
+}
+
+.login-brand span {
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.login-card h1 {
+  margin: 0 0 20px;
+  color: #111827;
+  font-size: 2rem;
+}
+
+.login-form {
+  display: grid;
+  gap: 16px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.login-form input {
+  min-height: 44px;
+  border: 1px solid #d7dde8;
+  border-radius: 10px;
+  padding: 0 12px;
+  background: #f9fafb;
+}
+
+.login-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.92rem;
+}
+
+.login-button {
+  width: 100%;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f766e 0%, #0ea5a4 100%);
+}
+
+.demo-users {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.demo-users p {
+  margin: 0 0 8px;
+  color: #475467;
+  font-weight: 600;
+}
+
+.demo-users ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475467;
+  display: grid;
+  gap: 4px;
 }
 
 .app-shell {
@@ -71,18 +180,22 @@ select {
   gap: 8px;
 }
 
-.nav-list a {
+.nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 44px;
+  width: 100%;
+  background: transparent;
   color: #e6ecf7;
-  text-decoration: none;
   border-radius: 8px;
   padding: 0 12px;
+  text-align: left;
+  justify-content: flex-start;
 }
 
-.nav-list a:hover {
+.nav-item.active,
+.nav-item:hover {
   background: #22304a;
 }
 
@@ -105,7 +218,9 @@ select {
 
 .topbar p,
 .topbar h1,
-.section-heading h2 {
+.section-heading h2,
+.section-heading h3,
+.profile-header h3 {
   margin: 0;
 }
 
@@ -118,6 +233,27 @@ select {
   color: #111827;
   font-size: 1.7rem;
   letter-spacing: 0;
+}
+
+.primary-button,
+.secondary-button,
+.close-button {
+  min-height: 42px;
+}
+
+.primary-button {
+  background: #0f766e;
+}
+
+.secondary-button {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.close-button {
+  background: transparent;
+  color: #334155;
+  border: 1px solid #d7dde8;
 }
 
 .metrics-grid {
@@ -139,7 +275,8 @@ select {
 }
 
 .metric span,
-.billing-summary span {
+.billing-summary span,
+.profile-grid span {
   display: block;
   color: #667085;
   font-size: 0.9rem;
@@ -157,6 +294,35 @@ select {
   padding: 20px;
 }
 
+.patients-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.patient-toolbar {
+  display: flex;
+  margin-top: 8px;
+}
+
+.patient-toolbar input {
+  width: min(100%, 380px);
+}
+
+.patients-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 18px;
+}
+
+.patient-list-card,
+.patient-profile-card,
+.modal-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
 .table {
   display: grid;
   margin-top: 16px;
@@ -165,9 +331,7 @@ select {
 
 .table-row {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1.4fr 0.7fr;
   gap: 12px;
-  min-width: 720px;
   border-bottom: 1px solid #e7ebf2;
   padding: 12px 0;
 }
@@ -177,6 +341,31 @@ select {
   font-weight: 700;
 }
 
+.patient-row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1.4fr;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  background: transparent;
+  color: #1f2937;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.patient-row.active {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+}
+
+.patient-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .danger {
   color: #b42318;
   font-weight: 700;
@@ -184,6 +373,96 @@ select {
 
 .muted {
   color: #667085;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.badge {
+  margin: 0 0 6px;
+  color: #0f766e;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #111827;
+}
+
+.profile-alerts {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.profile-alerts h4 {
+  margin: 0 0 10px;
+}
+
+.profile-alerts ul {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.modal-card {
+  width: min(100%, 620px);
+  background: #ffffff;
+}
+
+.patient-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.patient-form label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.patient-form label:last-of-type {
+  grid-column: 1 / -1;
+}
+
+.patient-form input {
+  width: 100%;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
 }
 
 .legend {
@@ -296,9 +575,12 @@ select {
     position: static;
   }
 
+  .patients-layout,
+  .patient-form,
   .metrics-grid,
   .appointments,
-  .billing-summary {
+  .billing-summary,
+  .profile-grid {
     grid-template-columns: 1fr;
     display: grid;
   }
