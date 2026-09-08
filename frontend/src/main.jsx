@@ -29,7 +29,14 @@ const temporaryCubicles = [
   { id: 3, name: "Cubiculo 3" }
 ];
 
-const appointmentStatuses = ["CONFIRMADA", "EN_ESPERA", "LLEGO", "FALTO"];
+const appointmentStatuses = ["EN_ESPERA", "LLEGO", "FALTO"];
+const clinicTimeZone = "America/Mexico_City";
+const appointmentTimes = Array.from({ length: 49 }, (_, index) => {
+  const totalMinutes = 8 * 60 + index * 15;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+});
 const appointmentWeekdays = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"];
 
 const emptyForm = {
@@ -49,7 +56,7 @@ const emptyAppointmentForm = {
   time: "",
   reason: "",
   observations: "",
-  status: "CONFIRMADA"
+  status: "EN_ESPERA"
 };
 
 const validCredentials = {
@@ -68,6 +75,100 @@ function dateKeyFromDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function getClinicDateTimeParts() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: clinicTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(new Date()).reduce((parts, part) => {
+    parts[part.type] = part.value;
+    return parts;
+  }, {});
+}
+
+function getTodayDateKey() {
+  const parts = getClinicDateTimeParts();
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function getCurrentTimeKey() {
+  const parts = getClinicDateTimeParts();
+  return `${parts.hour}:${parts.minute}`;
+}
+
+function formatAppointmentDate(dateKey) {
+  const [year, month, day] = dateKey.split("-");
+  return `${month}/${day}/${year}`;
+}
+
+function formatAppointmentTime(time) {
+  return time?.slice(0, 5) || "";
+}
+
+function formatAppointmentStatus(status) {
+  return {
+    LLEGO: "Llegó",
+    EN_ESPERA: "En espera",
+    FALTO: "Faltó",
+  }[status] || status;
+}
+
+function normalizeAppointmentStatus(status) {
+  return ["LLEGO", "EN_ESPERA", "FALTO"].includes(status) ? status : "EN_ESPERA";
+}
+
+function isFutureAppointment(dateKey) {
+  return dateKey > getTodayDateKey();
+}
+
+function isBeforeAppointmentTime(dateKey, time) {
+  return dateKey === getTodayDateKey() && formatAppointmentTime(time) > getCurrentTimeKey();
+}
+
+function isPastAppointment(dateKey, time) {
+  return dateKey < getTodayDateKey() || (
+    dateKey === getTodayDateKey() &&
+    formatAppointmentTime(time) < getCurrentTimeKey()
+  );
+}
+
+function getAllowedAppointmentStatuses(dateKey, time) {
+  if (isFutureAppointment(dateKey)) {
+    return ["EN_ESPERA"];
+  }
+
+  if (isPastAppointment(dateKey, time)) {
+    return ["LLEGO", "FALTO"];
+  }
+
+  return ["EN_ESPERA", "LLEGO"];
+}
+
+function normalizeStatusForAppointment(status, dateKey, time) {
+  const allowedStatuses = getAllowedAppointmentStatuses(dateKey, time);
+  return allowedStatuses.includes(status) ? status : allowedStatuses[0];
+}
+
+function formatAppointmentTimeOption(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const period = hours >= 12 ? "PM" : "AM";
+  const displayHours = hours % 12 || 12;
+  return `${String(displayHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+function getAvailableAppointmentTimes(dateKey) {
+  if (dateKey !== getTodayDateKey()) {
+    return appointmentTimes;
+  }
+
+  const currentTime = getCurrentTimeKey();
+  return appointmentTimes.filter((time) => time > currentTime);
 }
 
 function getWeekDays(referenceDate) {
@@ -93,8 +194,9 @@ function App() {
   const [patients, setPatients] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [appointments, setAppointments] = useState([]);
-  const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(getTodayDateKey);
   const [appointmentView, setAppointmentView] = useState("daily");
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState(null);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState("");
   const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
@@ -113,6 +215,8 @@ function App() {
   const [formMode, setFormMode] = useState("create");
   const [formState, setFormState] = useState(emptyForm);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [, setClockTick] = useState(0);
+  const availableAppointmentTimes = getAvailableAppointmentTimes(appointmentForm.date);
 
   const fetchAppointments = async () => {
     try {
@@ -122,7 +226,10 @@ function App() {
       }
 
       const data = await response.json();
-      setAppointments(data);
+      setAppointments(data.map((appointment) => ({
+        ...appointment,
+        status: normalizeAppointmentStatus(appointment.status)
+      })));
       setAppointmentsError("");
     } catch (error) {
       console.error(error);
@@ -135,6 +242,11 @@ function App() {
 
   useEffect(() => {
     fetchAppointments();
+  }, []);
+
+  useEffect(() => {
+    const clock = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
+    return () => window.clearInterval(clock);
   }, []);
 
   const filteredAppointments = useMemo(
@@ -153,6 +265,11 @@ function App() {
         .sort((firstAppointment, secondAppointment) => firstAppointment.time.localeCompare(secondAppointment.time))
     }));
   }, [appointments, selectedAppointmentDate]);
+
+  const selectedAppointment = useMemo(
+    () => appointments.find((appointment) => appointment.id === selectedAppointmentId) || null,
+    [appointments, selectedAppointmentId]
+  );
 
   const fetchPatients = async () => {
     setLoadingPatients(true);
@@ -244,6 +361,10 @@ function App() {
     }
   };
 
+  const openAppointmentDetails = (appointment) => {
+    setSelectedAppointmentId(appointment.id);
+  };
+
   const openEditAppointmentForm = async (appointment) => {
     const patientList = patients.length > 0 ? patients : await fetchPatients();
 
@@ -257,7 +378,11 @@ function App() {
       time: appointment.time?.slice(0, 5) || "",
       reason: appointment.reason || "",
       observations: appointment.observations || "",
-      status: appointment.status || "CONFIRMADA"
+      status: normalizeStatusForAppointment(
+        appointment.status,
+        appointment.date?.slice(0, 10),
+        appointment.time
+      )
     });
     setAppointmentFormError("");
     setIsAppointmentFormOpen(true);
@@ -267,6 +392,19 @@ function App() {
     event.preventDefault();
     setSavingAppointment(true);
     setAppointmentFormError("");
+
+    const today = getTodayDateKey();
+    if (!appointmentForm.date || appointmentForm.date < today) {
+      setAppointmentFormError("No se puede agendar una cita en una fecha pasada");
+      setSavingAppointment(false);
+      return;
+    }
+
+    if (appointmentForm.date === today && appointmentForm.time <= getCurrentTimeKey()) {
+      setAppointmentFormError("No se puede agendar una cita en un horario que ya pasó");
+      setSavingAppointment(false);
+      return;
+    }
 
     const selectedPatient = patients.find((patient) => patient.id === Number(appointmentForm.patientId));
     const selectedDoctor = temporaryDoctors.find((doctor) => doctor.id === Number(appointmentForm.doctorId));
@@ -283,7 +421,7 @@ function App() {
       time: appointmentForm.time,
       reason: appointmentForm.reason,
       observations: appointmentForm.observations,
-      status: appointmentForm.status
+      status: normalizeStatusForAppointment(appointmentForm.status, appointmentForm.date, appointmentForm.time)
     };
 
     try {
@@ -335,6 +473,9 @@ function App() {
       }
 
       setAppointments((currentAppointments) => currentAppointments.filter((item) => item.id !== appointment.id));
+      if (selectedAppointmentId === appointment.id) {
+        setSelectedAppointmentId(null);
+      }
     } catch (error) {
       console.error(error);
       setAppointmentDeleteError(error.message || "No se pudo eliminar la cita. Intenta nuevamente.");
@@ -345,6 +486,26 @@ function App() {
 
   const handleAppointmentStatusChange = async (appointment, status) => {
     if (updatingAppointmentId === appointment.id || appointment.status === status) {
+      return;
+    }
+
+    if (!["LLEGO", "EN_ESPERA", "FALTO"].includes(status)) {
+      setAppointmentStatusError("Estado de cita no permitido");
+      return;
+    }
+
+    if (isFutureAppointment(appointment.date?.slice(0, 10)) && status !== "EN_ESPERA") {
+      setAppointmentStatusError("El estado podrá actualizarse el día de la cita.");
+      return;
+    }
+
+    if (isPastAppointment(appointment.date?.slice(0, 10), appointment.time) && status === "EN_ESPERA") {
+      setAppointmentStatusError("Una cita vencida no puede permanecer En espera.");
+      return;
+    }
+
+    if (isBeforeAppointmentTime(appointment.date?.slice(0, 10), appointment.time) && status === "FALTO") {
+      setAppointmentStatusError("No se puede marcar Faltó antes de la hora de la cita.");
       return;
     }
 
@@ -365,7 +526,7 @@ function App() {
 
       const updatedAppointment = await response.json();
       setAppointments((currentAppointments) => currentAppointments.map((item) => (
-        item.id === appointment.id ? { ...item, status: updatedAppointment.status } : item
+        item.id === appointment.id ? { ...item, status: normalizeAppointmentStatus(updatedAppointment.status) } : item
       )));
     } catch (error) {
       console.error(error);
@@ -734,6 +895,7 @@ function App() {
                     value={selectedAppointmentDate}
                     onChange={(event) => setSelectedAppointmentDate(event.target.value)}
                     aria-label="Fecha de Agenda"
+                    lang="en-US"
                   />
                 </label>
               </div>
@@ -772,11 +934,7 @@ function App() {
                     <AppointmentCard
                       key={appointment.id}
                       appointment={appointment}
-                      onEdit={openEditAppointmentForm}
-                      onDelete={handleDeleteAppointment}
-                      onStatusChange={handleAppointmentStatusChange}
-                      deletingAppointmentId={deletingAppointmentId}
-                      updatingAppointmentId={updatingAppointmentId}
+                      onView={openAppointmentDetails}
                     />
                   ))
                 )}
@@ -788,7 +946,7 @@ function App() {
                   <section className="appointment-week-day" key={day.date}>
                     <div className="appointment-week-day-header">
                       <strong>{day.label}</strong>
-                      <span>{day.date}</span>
+                      <span>{formatAppointmentDate(day.date)}</span>
                     </div>
                     {day.appointments.length === 0 ? (
                       <p className="appointment-empty-day">Sin citas</p>
@@ -798,11 +956,8 @@ function App() {
                           <AppointmentCard
                             key={appointment.id}
                             appointment={appointment}
-                            onEdit={openEditAppointmentForm}
-                            onDelete={handleDeleteAppointment}
-                            onStatusChange={handleAppointmentStatusChange}
-                            deletingAppointmentId={deletingAppointmentId}
-                            updatingAppointmentId={updatingAppointmentId}
+                            showDate={false}
+                            onView={openAppointmentDetails}
                           />
                         ))}
                       </div>
@@ -810,6 +965,20 @@ function App() {
                   </section>
                 ))}
               </div>
+            )}
+            {selectedAppointment && (
+              <AppointmentDetailModal
+                appointment={selectedAppointment}
+                onClose={() => setSelectedAppointmentId(null)}
+                onEdit={async () => {
+                  setSelectedAppointmentId(null);
+                  await openEditAppointmentForm(selectedAppointment);
+                }}
+                onDelete={() => handleDeleteAppointment(selectedAppointment)}
+                onStatusChange={handleAppointmentStatusChange}
+                deletingAppointmentId={deletingAppointmentId}
+                updatingAppointmentId={updatingAppointmentId}
+              />
             )}
           </section>
         )}
@@ -888,7 +1057,7 @@ function App() {
                 </label>
 
                 <label>
-                  Doctor temporal
+                  Doctor
                   <select
                     value={appointmentForm.doctorId}
                     onChange={(event) => setAppointmentForm({ ...appointmentForm, doctorId: event.target.value })}
@@ -902,7 +1071,7 @@ function App() {
                 </label>
 
                 <label>
-                  Cubiculo temporal
+                  Cubiculo
                   <select
                     value={appointmentForm.cubicleId}
                     onChange={(event) => setAppointmentForm({ ...appointmentForm, cubicleId: event.target.value })}
@@ -920,19 +1089,41 @@ function App() {
                   <input
                     type="date"
                     value={appointmentForm.date}
-                    onChange={(event) => setAppointmentForm({ ...appointmentForm, date: event.target.value })}
+                    min={getTodayDateKey()}
+                    onChange={(event) => setAppointmentForm({
+                      ...appointmentForm,
+                      date: event.target.value,
+                      status: normalizeStatusForAppointment(appointmentForm.status, event.target.value, appointmentForm.time)
+                    })}
                     required
+                    lang="en-US"
                   />
                 </label>
 
                 <label>
                   Hora
-                  <input
-                    type="time"
+                  <select
                     value={appointmentForm.time}
-                    onChange={(event) => setAppointmentForm({ ...appointmentForm, time: event.target.value })}
+                    onChange={(event) => setAppointmentForm({
+                      ...appointmentForm,
+                      time: event.target.value,
+                      status: normalizeStatusForAppointment(appointmentForm.status, appointmentForm.date, event.target.value)
+                    })}
                     required
-                  />
+                  >
+                    <option value="">Selecciona un horario</option>
+                    {appointmentForm.time && !availableAppointmentTimes.includes(appointmentForm.time) ? (
+                      <option value={appointmentForm.time} disabled>
+                        {formatAppointmentTimeOption(appointmentForm.time)} (selecciona un horario válido)
+                      </option>
+                    ) : null}
+                    {availableAppointmentTimes.map((time) => (
+                      <option value={time} key={time}>{formatAppointmentTimeOption(time)}</option>
+                    ))}
+                  </select>
+                  {appointmentForm.date === getTodayDateKey() && availableAppointmentTimes.length === 0 ? (
+                    <small>No quedan horarios disponibles para hoy.</small>
+                  ) : null}
                 </label>
 
                 <label>
@@ -952,15 +1143,21 @@ function App() {
                   />
                 </label>
 
-                <label>
-                  Estado
-                  <select
-                    value={appointmentForm.status}
-                    onChange={(event) => setAppointmentForm({ ...appointmentForm, status: event.target.value })}
-                  >
-                    {appointmentStatuses.map((status) => <option value={status} key={status}>{status}</option>)}
-                  </select>
-                </label>
+                {appointmentFormMode === "edit" ? (
+                  <label>
+                    Estado
+                    <select
+                      value={appointmentForm.status}
+                      onChange={(event) => setAppointmentForm({ ...appointmentForm, status: event.target.value })}
+                    >
+                      {appointmentStatuses
+                        .filter((status) => getAllowedAppointmentStatuses(appointmentForm.date, appointmentForm.time).includes(status))
+                        .map((status) => (
+                          <option value={status} key={status}>{formatAppointmentStatus(status)}</option>
+                        ))}
+                    </select>
+                  </label>
+                ) : null}
 
                 {appointmentFormError ? <p className="appointment-form-error">{appointmentFormError}</p> : null}
 
@@ -990,8 +1187,9 @@ function Metric({ label, value }) {
   );
 }
 
-function AppointmentCard({
+function AppointmentDetailModal({
   appointment,
+  onClose,
   onEdit,
   onDelete,
   onStatusChange,
@@ -999,44 +1197,101 @@ function AppointmentCard({
   updatingAppointmentId
 }) {
   const isBusy = deletingAppointmentId === appointment.id || updatingAppointmentId === appointment.id;
+  const isFuture = isFutureAppointment(appointment.date?.slice(0, 10));
+  const isBeforeScheduledTime = isBeforeAppointmentTime(appointment.date?.slice(0, 10), appointment.time);
+  const isPast = isPastAppointment(appointment.date?.slice(0, 10), appointment.time);
 
   return (
-    <article className={`appointment ${statusClass(appointment.status)}`}>
-      <div className="appointment-details">
-        <strong>{appointment.time}</strong>
-        <span>{appointment.patientName}</span>
-        <small>{appointment.date} / {appointment.doctor} / {appointment.room}</small>
-      </div>
-      <div className="appointment-actions">
-        <button
-          type="button"
-          className="appointment-edit-button"
-          onClick={() => onEdit(appointment)}
-          disabled={isBusy}
-        >
-          Editar
-        </button>
-        <button
-          type="button"
-          className="appointment-delete-button"
-          onClick={() => onDelete(appointment)}
-          disabled={isBusy}
-        >
-          {deletingAppointmentId === appointment.id ? "Eliminando..." : "Eliminar"}
-        </button>
-        <div className="appointment-status-actions" aria-label={`Estado de cita de ${appointment.patientName}`}>
+    <div className="modal-backdrop">
+      <div className="modal-card appointment-detail-modal" role="dialog" aria-modal="true" aria-labelledby="appointment-detail-title">
+        <div className="section-heading">
+          <h3 id="appointment-detail-title">Ver cita</h3>
+          <button type="button" className="close-button" onClick={onClose}>Cerrar</button>
+        </div>
+
+        <div className="appointment-detail-grid">
+          <div>
+            <span>Paciente</span>
+            <strong>{appointment.patientName}</strong>
+          </div>
+          <div>
+            <span>Doctor</span>
+            <strong>{appointment.doctor}</strong>
+          </div>
+          <div>
+            <span>Cubículo</span>
+            <strong>{appointment.room}</strong>
+          </div>
+          <div>
+            <span>Fecha</span>
+            <strong>{formatAppointmentDate(appointment.date)}</strong>
+          </div>
+          <div>
+            <span>Hora</span>
+            <strong>{formatAppointmentTime(appointment.time)}</strong>
+          </div>
+          <div>
+            <span>Estado</span>
+            <strong className={`appointment-status-badge ${statusClass(appointment.status)}`}>
+              {formatAppointmentStatus(appointment.status)}
+            </strong>
+          </div>
+          <div className="appointment-detail-wide">
+            <span>Motivo</span>
+            <strong>{appointment.reason || "Sin registrar"}</strong>
+          </div>
+          <div className="appointment-detail-wide">
+            <span>Observaciones</span>
+            <strong>{appointment.observations || "Sin registrar"}</strong>
+          </div>
+        </div>
+
+        <div className="appointment-detail-status-actions" aria-label={`Cambiar estado de cita de ${appointment.patientName}`}>
           {["LLEGO", "EN_ESPERA", "FALTO"].map((status) => (
             <button
               type="button"
               key={status}
               className={`appointment-status-button ${statusClass(status)}${appointment.status === status ? " active" : ""}`}
               onClick={() => onStatusChange(appointment, status)}
-              disabled={isBusy}
+              disabled={isBusy || (isFuture && status !== "EN_ESPERA") || (isBeforeScheduledTime && status === "FALTO") || (isPast && status === "EN_ESPERA")}
             >
-              {status}
+              {formatAppointmentStatus(status)}
             </button>
           ))}
         </div>
+        {isFuture ? <p className="appointment-future-status-note">El estado podrá actualizarse el día de la cita.</p> : null}
+        {isBeforeScheduledTime ? <p className="appointment-future-status-note">Faltó estará disponible después de la hora de la cita.</p> : null}
+        {isPast ? <p className="appointment-future-status-note">Una cita vencida no puede permanecer En espera.</p> : null}
+
+        <div className="appointment-detail-actions">
+          <button type="button" className="appointment-edit-button" onClick={onEdit} disabled={isBusy}>Editar</button>
+          <button type="button" className="appointment-delete-button" onClick={onDelete} disabled={isBusy}>
+            {deletingAppointmentId === appointment.id ? "Eliminando..." : "Eliminar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppointmentCard({
+  appointment,
+  showDate = true,
+  onView
+}) {
+  return (
+    <article className={`appointment ${statusClass(appointment.status)}`}>
+      <div className="appointment-details">
+        <strong>{formatAppointmentTime(appointment.time)}</strong>
+        <span>{appointment.patientName}</span>
+        <small>{appointment.doctor} / {appointment.room}</small>
+        {showDate ? <small>{formatAppointmentDate(appointment.date)}</small> : null}
+        <span className={`appointment-status-badge ${statusClass(appointment.status)}`}>
+          {formatAppointmentStatus(appointment.status)}
+        </span>
+      </div>
+      <div className="appointment-actions">
+        <button type="button" className="appointment-detail-view-button" onClick={() => onView(appointment)}>Ver</button>
       </div>
     </article>
   );
@@ -1047,7 +1302,6 @@ function statusClass(status) {
     LLEGO: "arrived",
     EN_ESPERA: "waiting",
     FALTO: "missed",
-    CONFIRMADA: "",
     Llego: "arrived",
     Espera: "waiting",
     Falto: "missed"
