@@ -119,6 +119,14 @@ function formatAppointmentStatus(status) {
   }[status] || status;
 }
 
+function translateAppointmentSaveError(message) {
+  return {
+    "El doctor ya tiene una cita en ese horario": "El doctor no está disponible en ese horario.",
+    "El cubículo ya está ocupado en ese horario": "El cubículo no está disponible en ese horario.",
+    "El doctor ya tiene una cita y el cubículo ya está ocupado en ese horario": "El doctor y el cubículo no están disponibles en ese horario."
+  }[message] || message;
+}
+
 function normalizeAppointmentStatus(status) {
   return ["LLEGO", "EN_ESPERA", "FALTO"].includes(status) ? status : "EN_ESPERA";
 }
@@ -160,6 +168,37 @@ function formatAppointmentTimeOption(time) {
   const period = hours >= 12 ? "PM" : "AM";
   const displayHours = hours % 12 || 12;
   return `${String(displayHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${period}`;
+}
+
+function getAppointmentConflictMessage(appointments, form, excludedId = null) {
+  if (!form.date || !form.time || !form.doctorId || !form.cubicleId) {
+    return "";
+  }
+
+  const conflictingAppointments = appointments.filter((appointment) => (
+    appointment.id !== excludedId &&
+    appointment.date?.slice(0, 10) === form.date &&
+    formatAppointmentTime(appointment.time) === form.time
+  ));
+
+  const doctorConflict = conflictingAppointments.some(
+    (appointment) => String(appointment.doctorId) === String(form.doctorId)
+  );
+  const cubicleConflict = conflictingAppointments.some(
+    (appointment) => String(appointment.cubicleId) === String(form.cubicleId)
+  );
+
+  if (doctorConflict && cubicleConflict) {
+    return "El doctor ya tiene una cita y el cubículo ya está ocupado en ese horario.";
+  }
+  if (doctorConflict) {
+    return "El doctor ya tiene una cita en ese horario.";
+  }
+  if (cubicleConflict) {
+    return "El cubículo ya está ocupado en ese horario.";
+  }
+
+  return "";
 }
 
 function getAvailableAppointmentTimes(dateKey) {
@@ -424,6 +463,17 @@ function App() {
       status: normalizeStatusForAppointment(appointmentForm.status, appointmentForm.date, appointmentForm.time)
     };
 
+    const preventiveConflict = getAppointmentConflictMessage(
+      appointments,
+      appointmentForm,
+      appointmentFormMode === "edit" ? editingAppointmentId : null
+    );
+    if (preventiveConflict) {
+      setAppointmentFormError(preventiveConflict);
+      setSavingAppointment(false);
+      return;
+    }
+
     try {
       const url = appointmentFormMode === "edit"
         ? `http://localhost:3000/api/appointments/${editingAppointmentId}`
@@ -437,7 +487,10 @@ function App() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "No se pudo guardar la cita");
+        const backendMessage = errorData.error || errorData.message;
+        throw new Error(
+          translateAppointmentSaveError(backendMessage || "No se pudo guardar la cita.")
+        );
       }
 
       await fetchAppointments();
@@ -447,7 +500,7 @@ function App() {
       setAppointmentForm(emptyAppointmentForm);
     } catch (error) {
       console.error(error);
-      setAppointmentFormError(error.message || "No se pudo guardar la cita. Intenta nuevamente.");
+      setAppointmentFormError(error.message || "No se pudo guardar la cita.");
     } finally {
       setSavingAppointment(false);
     }

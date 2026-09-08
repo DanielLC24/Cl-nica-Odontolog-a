@@ -203,6 +203,49 @@ function hasRequiredAppointmentFields(fields) {
   );
 }
 
+async function findAppointmentConflict(fields, excludedId = null) {
+  const result = await query(
+    `SELECT
+       EXISTS (
+         SELECT 1
+         FROM appointments
+         WHERE appointment_date = $1
+           AND appointment_time = $2
+           AND doctor_id IS NOT NULL
+           AND doctor_id = $3
+           AND ($4::integer IS NULL OR id <> $4)
+       ) AS doctor_conflict,
+       EXISTS (
+         SELECT 1
+         FROM appointments
+         WHERE appointment_date = $1
+           AND appointment_time = $2
+           AND cubicle_id IS NOT NULL
+           AND cubicle_id = $5
+           AND ($4::integer IS NULL OR id <> $4)
+       ) AS cubicle_conflict`,
+    [fields.date, fields.time, fields.doctorId, excludedId, fields.cubicleId]
+  );
+
+  return result.rows[0];
+}
+
+function sendConflictResponse(res, conflict) {
+  if (conflict.doctor_conflict && conflict.cubicle_conflict) {
+    return res.status(409).json({ error: "El doctor ya tiene una cita y el cubículo ya está ocupado en ese horario" });
+  }
+
+  if (conflict.doctor_conflict) {
+    return res.status(409).json({ error: "El doctor ya tiene una cita en ese horario" });
+  }
+
+  if (conflict.cubicle_conflict) {
+    return res.status(409).json({ error: "El cubículo ya está ocupado en ese horario" });
+  }
+
+  return null;
+}
+
 app.get("/health", (_req, res) => {
   res.json({ service: "appointments-service", status: "ok" });
 });
@@ -248,6 +291,11 @@ app.post("/", async (req, res, next) => {
 
     if (req.body.status && !isAllowedStatus(req.body.status)) {
       return res.status(400).json({ error: "Estado de cita no permitido" });
+    }
+
+    const conflictResponse = sendConflictResponse(res, await findAppointmentConflict(fields));
+    if (conflictResponse) {
+      return conflictResponse;
     }
 
     const result = await query(
@@ -334,6 +382,11 @@ app.put("/:id", async (req, res, next) => {
     }
     if (fields.date === current.date && fields.time > current.time && fields.status === "FALTO") {
       return res.status(400).json({ error: "No se puede marcar FALTO antes de la hora de la cita" });
+    }
+
+    const conflictResponse = sendConflictResponse(res, await findAppointmentConflict(fields, req.params.id));
+    if (conflictResponse) {
+      return conflictResponse;
     }
 
     const status = fields.date > getTodayDateKey() ? "EN_ESPERA" : fields.status;
