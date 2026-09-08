@@ -457,6 +457,54 @@ input {
   width: 100%;
 }
 
+.appointment-modal {
+  width: min(100%, 720px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.appointment-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.appointment-form label {
+  display: grid;
+  gap: 8px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.appointment-form input,
+.appointment-form select,
+.appointment-form textarea {
+  width: 100%;
+}
+
+.appointment-form textarea {
+  min-height: 84px;
+  resize: vertical;
+  border: 1px solid #d7dde8;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.appointment-form-wide,
+.appointment-form-error,
+.appointment-form-actions {
+  grid-column: 1 / -1;
+}
+
+.appointment-form-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.92rem;
+}
+
 .form-actions {
   grid-column: 1 / -1;
   display: flex;
@@ -479,6 +527,37 @@ input {
   border-radius: 50%;
 }
 
+.appointment-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.appointment-date-filter input {
+  min-height: 38px;
+}
+
+.appointment-view-switcher {
+  display: flex;
+  gap: 6px;
+}
+
+.appointment-view-button {
+  min-height: 36px;
+  padding: 0 10px;
+  color: #334155;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.appointment-view-button.active {
+  color: #ffffff;
+  background: #0f766e;
+  border-color: #0f766e;
+}
+
 .appointments {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -487,10 +566,161 @@ input {
 }
 
 .appointment {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   border-left: 5px solid #d7dde8;
   border-radius: 8px;
   background: #f8fafc;
   padding: 14px;
+}
+
+.appointment-details {
+  min-width: 0;
+}
+
+.appointment-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.appointment-edit-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+}
+
+.appointment-delete-button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  color: #b42318;
+  background: #ffffff;
+  border: 1px solid #f1a7a0;
+}
+
+.appointment-edit-button:disabled,
+.appointment-delete-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.appointment-delete-error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-size: 0.92rem;
+}
+
+.appointment-status-error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-size: 0.92rem;
+}
+
+.appointment-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.appointment-status-button {
+  min-height: 28px;
+  padding: 0 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  background: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.appointment-status-button.arrived {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.appointment-status-button.waiting {
+  border-color: #fde047;
+  background: #fefce8;
+  color: #854d0e;
+}
+
+.appointment-status-button.missed {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.appointment-status-button.active {
+  box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.2);
+}
+
+.appointment-status-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.appointment-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.appointment-week-day {
+  min-height: 180px;
+  border: 1px solid #dfe5ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.appointment-week-day-header {
+  display: grid;
+  gap: 3px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.appointment-week-day-header span {
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+.appointment-week-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.appointment-week-list .appointment {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.appointment-week-list .appointment-actions {
+  justify-items: stretch;
+}
+
+.appointment-week-list .appointment-status-actions {
+  justify-content: flex-start;
+}
+
+.appointment-empty-day {
+  margin: 12px 0 0;
+  color: #667085;
+  font-size: 0.9rem;
 }
 
 .appointment strong,
@@ -577,6 +807,7 @@ input {
 
   .patients-layout,
   .patient-form,
+  .appointment-form,
   .metrics-grid,
   .appointments,
   .billing-summary,

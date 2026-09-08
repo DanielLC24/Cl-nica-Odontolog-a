@@ -2,7 +2,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import morgan from "morgan";
-import { createProxyMiddleware } from "http-proxy-middleware";
+import { createProxyMiddleware, fixRequestBody } from "http-proxy-middleware";
 
 dotenv.config();
 
@@ -19,7 +19,6 @@ const routes = [
 
 app.use(cors());
 app.use(morgan("dev"));
-app.use(express.json());
 
 app.get("/health", (_req, res) => {
   res.json({ service: "api-gateway", status: "ok" });
@@ -31,10 +30,13 @@ for (const [path, target] of routes) {
     createProxyMiddleware({
       target,
       changeOrigin: true,
-      pathRewrite: { [`^${path}`]: "" }
+      pathRewrite: { [`^${path}`]: "" },
+      on: { proxyReq: fixRequestBody }
     })
   );
 }
+
+app.use(express.json());
 
 app.listen(port, () => {
   console.log(`api-gateway running on port ${port}`);

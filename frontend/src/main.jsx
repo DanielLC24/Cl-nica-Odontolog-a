@@ -3,12 +3,6 @@ import { createRoot } from "react-dom/client";
 import { Activity, CalendarDays, CreditCard, LayoutDashboard, Stethoscope, UserRound } from "lucide-react";
 import "./styles.css";
 
-const appointments = [
-  { time: "09:00", patient: "Sofia Herrera", doctor: "Dra. Rivera", room: "Cubiculo 1", status: "Llego" },
-  { time: "10:30", patient: "Ana Martinez", doctor: "Dra. Rivera", room: "Cubiculo 1", status: "Espera" },
-  { time: "12:00", patient: "Carlos Ruiz", doctor: "Dr. Torres", room: "Cubiculo 2", status: "Falto" }
-];
-
 const teeth = Array.from({ length: 32 }, (_, index) => {
   const id = index + 1;
   const states = ["Sano", "Sano", "Sano", "Caries", "Endodoncia"];
@@ -23,6 +17,21 @@ const navItems = [
   { key: "billing", label: "Pagos", icon: CreditCard }
 ];
 
+const temporaryDoctors = [
+  { id: 1, name: "Dra. Rivera" },
+  { id: 2, name: "Dr. Torres" },
+  { id: 3, name: "Dra. Lopez" }
+];
+
+const temporaryCubicles = [
+  { id: 1, name: "Cubiculo 1" },
+  { id: 2, name: "Cubiculo 2" },
+  { id: 3, name: "Cubiculo 3" }
+];
+
+const appointmentStatuses = ["CONFIRMADA", "EN_ESPERA", "LLEGO", "FALTO"];
+const appointmentWeekdays = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"];
+
 const emptyForm = {
   fullName: "",
   phone: "",
@@ -32,11 +41,48 @@ const emptyForm = {
   medicalAlerts: ""
 };
 
+const emptyAppointmentForm = {
+  patientId: "",
+  doctorId: "",
+  cubicleId: "",
+  date: "",
+  time: "",
+  reason: "",
+  observations: "",
+  status: "CONFIRMADA"
+};
+
 const validCredentials = {
   "admin@clinica.test": "admin123",
   "doctor@clinica.test": "doctor123",
   "recepcion@clinica.test": "recepcion123"
 };
+
+function dateFromKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function dateKeyFromDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekDays(referenceDate) {
+  const reference = dateFromKey(referenceDate);
+  const dayOfWeek = reference.getDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(reference);
+  monday.setDate(reference.getDate() - daysFromMonday);
+
+  return appointmentWeekdays.map((label, index) => {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + index);
+    return { label, date: dateKeyFromDate(day) };
+  });
+}
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -46,12 +92,67 @@ function App() {
   const [loginError, setLoginError] = useState("");
   const [patients, setPatients] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
+  const [appointments, setAppointments] = useState([]);
+  const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [appointmentView, setAppointmentView] = useState("daily");
+  const [loadingAppointments, setLoadingAppointments] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState("");
+  const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
+  const [appointmentFormMode, setAppointmentFormMode] = useState("create");
+  const [editingAppointmentId, setEditingAppointmentId] = useState(null);
+  const [appointmentForm, setAppointmentForm] = useState(emptyAppointmentForm);
+  const [appointmentFormError, setAppointmentFormError] = useState("");
+  const [savingAppointment, setSavingAppointment] = useState(false);
+  const [deletingAppointmentId, setDeletingAppointmentId] = useState(null);
+  const [appointmentDeleteError, setAppointmentDeleteError] = useState("");
+  const [updatingAppointmentId, setUpdatingAppointmentId] = useState(null);
+  const [appointmentStatusError, setAppointmentStatusError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("create");
   const [formState, setFormState] = useState(emptyForm);
   const [savingPatient, setSavingPatient] = useState(false);
+
+  const fetchAppointments = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/api/appointments");
+      if (!response.ok) {
+        throw new Error("No se pudieron cargar las citas");
+      }
+
+      const data = await response.json();
+      setAppointments(data);
+      setAppointmentsError("");
+    } catch (error) {
+      console.error(error);
+      setAppointments([]);
+      setAppointmentsError("No se pudieron cargar las citas. Verifica que el backend este disponible.");
+    } finally {
+      setLoadingAppointments(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAppointments();
+  }, []);
+
+  const filteredAppointments = useMemo(
+    () => appointments
+      .filter((appointment) => appointment.date?.slice(0, 10) === selectedAppointmentDate)
+      .sort((firstAppointment, secondAppointment) => firstAppointment.time.localeCompare(secondAppointment.time)),
+    [appointments, selectedAppointmentDate]
+  );
+
+  const weeklyAppointments = useMemo(() => {
+    const weekDays = getWeekDays(selectedAppointmentDate);
+    return weekDays.map((day) => ({
+      ...day,
+      appointments: appointments
+        .filter((appointment) => appointment.date?.slice(0, 10) === day.date)
+        .sort((firstAppointment, secondAppointment) => firstAppointment.time.localeCompare(secondAppointment.time))
+    }));
+  }, [appointments, selectedAppointmentDate]);
 
   const fetchPatients = async () => {
     setLoadingPatients(true);
@@ -68,6 +169,7 @@ function App() {
       if (data.length === 0) {
         setSelectedPatientId(null);
       }
+      return data;
     } catch (error) {
       console.error(error);
       setPatients([]);
@@ -128,6 +230,149 @@ function App() {
     setFormMode("create");
     setFormState(emptyForm);
     setIsFormOpen(true);
+  };
+
+  const openAppointmentForm = async () => {
+    setAppointmentFormMode("create");
+    setEditingAppointmentId(null);
+    setAppointmentForm(emptyAppointmentForm);
+    setAppointmentFormError("");
+    setIsAppointmentFormOpen(true);
+
+    if (patients.length === 0) {
+      await fetchPatients();
+    }
+  };
+
+  const openEditAppointmentForm = async (appointment) => {
+    const patientList = patients.length > 0 ? patients : await fetchPatients();
+
+    setAppointmentFormMode("edit");
+    setEditingAppointmentId(appointment.id);
+    setAppointmentForm({
+      patientId: String(appointment.patientId || patientList.find((patient) => patient.fullName === appointment.patientName)?.id || ""),
+      doctorId: String(appointment.doctorId || ""),
+      cubicleId: String(appointment.cubicleId || ""),
+      date: appointment.date?.slice(0, 10) || "",
+      time: appointment.time?.slice(0, 5) || "",
+      reason: appointment.reason || "",
+      observations: appointment.observations || "",
+      status: appointment.status || "CONFIRMADA"
+    });
+    setAppointmentFormError("");
+    setIsAppointmentFormOpen(true);
+  };
+
+  const handleSaveAppointment = async (event) => {
+    event.preventDefault();
+    setSavingAppointment(true);
+    setAppointmentFormError("");
+
+    const selectedPatient = patients.find((patient) => patient.id === Number(appointmentForm.patientId));
+    const selectedDoctor = temporaryDoctors.find((doctor) => doctor.id === Number(appointmentForm.doctorId));
+    const selectedCubicle = temporaryCubicles.find((cubicle) => cubicle.id === Number(appointmentForm.cubicleId));
+
+    const payload = {
+      patientId: selectedPatient?.id,
+      patientName: selectedPatient?.fullName,
+      doctorId: selectedDoctor?.id,
+      doctor: selectedDoctor?.name,
+      cubicleId: selectedCubicle?.id,
+      room: selectedCubicle?.name,
+      date: appointmentForm.date,
+      time: appointmentForm.time,
+      reason: appointmentForm.reason,
+      observations: appointmentForm.observations,
+      status: appointmentForm.status
+    };
+
+    try {
+      const url = appointmentFormMode === "edit"
+        ? `http://localhost:3000/api/appointments/${editingAppointmentId}`
+        : "http://localhost:3000/api/appointments";
+      const method = appointmentFormMode === "edit" ? "PUT" : "POST";
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo guardar la cita");
+      }
+
+      await fetchAppointments();
+      setIsAppointmentFormOpen(false);
+      setAppointmentFormMode("create");
+      setEditingAppointmentId(null);
+      setAppointmentForm(emptyAppointmentForm);
+    } catch (error) {
+      console.error(error);
+      setAppointmentFormError(error.message || "No se pudo guardar la cita. Intenta nuevamente.");
+    } finally {
+      setSavingAppointment(false);
+    }
+  };
+
+  const handleDeleteAppointment = async (appointment) => {
+    const confirmed = window.confirm(`¿Deseas eliminar la cita de ${appointment.patientName}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingAppointmentId(appointment.id);
+    setAppointmentDeleteError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/appointments/${appointment.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo eliminar la cita");
+      }
+
+      setAppointments((currentAppointments) => currentAppointments.filter((item) => item.id !== appointment.id));
+    } catch (error) {
+      console.error(error);
+      setAppointmentDeleteError(error.message || "No se pudo eliminar la cita. Intenta nuevamente.");
+    } finally {
+      setDeletingAppointmentId(null);
+    }
+  };
+
+  const handleAppointmentStatusChange = async (appointment, status) => {
+    if (updatingAppointmentId === appointment.id || appointment.status === status) {
+      return;
+    }
+
+    setUpdatingAppointmentId(appointment.id);
+    setAppointmentStatusError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/appointments/${appointment.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo actualizar el estado de la cita");
+      }
+
+      const updatedAppointment = await response.json();
+      setAppointments((currentAppointments) => currentAppointments.map((item) => (
+        item.id === appointment.id ? { ...item, status: updatedAppointment.status } : item
+      )));
+    } catch (error) {
+      console.error(error);
+      setAppointmentStatusError(error.message || "No se pudo actualizar el estado. Intenta nuevamente.");
+    } finally {
+      setUpdatingAppointmentId(null);
+    }
   };
 
   const openEditForm = (patient) => {
@@ -272,7 +517,7 @@ function App() {
             <p>{userRole}</p>
             <h1>Panel de clinica odontologica</h1>
           </div>
-          <button type="button" className="primary-button">Nueva cita</button>
+          <button type="button" className="primary-button" onClick={openAppointmentForm}>Nueva cita</button>
         </header>
 
         {activeSection === "dashboard" && (
@@ -480,22 +725,92 @@ function App() {
         {activeSection === "appointments" && (
           <section id="appointments" className="panel">
             <div className="section-heading">
-              <h2>Agenda diaria</h2>
+              <div>
+                <h2>{appointmentView === "daily" ? "Agenda diaria" : "Agenda semanal"}</h2>
+                <label className="appointment-date-filter">
+                  Fecha de referencia:
+                  <input
+                    type="date"
+                    value={selectedAppointmentDate}
+                    onChange={(event) => setSelectedAppointmentDate(event.target.value)}
+                    aria-label="Fecha de Agenda"
+                  />
+                </label>
+              </div>
+              <div className="appointment-view-switcher" aria-label="Vista de Agenda">
+                <button
+                  type="button"
+                  className={appointmentView === "daily" ? "appointment-view-button active" : "appointment-view-button"}
+                  onClick={() => setAppointmentView("daily")}
+                >
+                  Vista diaria
+                </button>
+                <button
+                  type="button"
+                  className={appointmentView === "weekly" ? "appointment-view-button active" : "appointment-view-button"}
+                  onClick={() => setAppointmentView("weekly")}
+                >
+                  Vista semanal
+                </button>
+              </div>
               <div className="legend">
                 <span className="dot arrived"></span>Llego
                 <span className="dot waiting"></span>Espera
                 <span className="dot missed"></span>Falto
               </div>
             </div>
-            <div className="appointments">
-              {appointments.map((appointment) => (
-                <article className={`appointment ${statusClass(appointment.status)}`} key={`${appointment.time}-${appointment.patient}`}>
-                  <strong>{appointment.time}</strong>
-                  <span>{appointment.patient}</span>
-                  <small>{appointment.doctor} / {appointment.room}</small>
-                </article>
-              ))}
-            </div>
+            {appointmentDeleteError ? <p className="appointment-delete-error">{appointmentDeleteError}</p> : null}
+            {appointmentStatusError ? <p className="appointment-status-error">{appointmentStatusError}</p> : null}
+            {loadingAppointments ? <p>Cargando citas...</p> : null}
+            {appointmentsError ? <p>{appointmentsError}</p> : null}
+            {!loadingAppointments && !appointmentsError && appointmentView === "daily" && (
+              <div className="appointments">
+                {filteredAppointments.length === 0 ? (
+                  <p>No hay citas programadas para este día.</p>
+                ) : (
+                  filteredAppointments.map((appointment) => (
+                    <AppointmentCard
+                      key={appointment.id}
+                      appointment={appointment}
+                      onEdit={openEditAppointmentForm}
+                      onDelete={handleDeleteAppointment}
+                      onStatusChange={handleAppointmentStatusChange}
+                      deletingAppointmentId={deletingAppointmentId}
+                      updatingAppointmentId={updatingAppointmentId}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+            {!loadingAppointments && !appointmentsError && appointmentView === "weekly" && (
+              <div className="appointment-week-grid">
+                {weeklyAppointments.map((day) => (
+                  <section className="appointment-week-day" key={day.date}>
+                    <div className="appointment-week-day-header">
+                      <strong>{day.label}</strong>
+                      <span>{day.date}</span>
+                    </div>
+                    {day.appointments.length === 0 ? (
+                      <p className="appointment-empty-day">Sin citas</p>
+                    ) : (
+                      <div className="appointment-week-list">
+                        {day.appointments.map((appointment) => (
+                          <AppointmentCard
+                            key={appointment.id}
+                            appointment={appointment}
+                            onEdit={openEditAppointmentForm}
+                            onDelete={handleDeleteAppointment}
+                            onStatusChange={handleAppointmentStatusChange}
+                            deletingAppointmentId={deletingAppointmentId}
+                            updatingAppointmentId={updatingAppointmentId}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
@@ -545,6 +860,122 @@ function App() {
             </div>
           </section>
         )}
+
+        {isAppointmentFormOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card appointment-modal">
+              <div className="section-heading">
+                <h3>{appointmentFormMode === "edit" ? "Editar cita" : "Nueva cita"}</h3>
+                <button type="button" className="close-button" onClick={() => setIsAppointmentFormOpen(false)}>
+                  Cerrar
+                </button>
+              </div>
+
+              <form className="appointment-form" onSubmit={handleSaveAppointment}>
+                <label>
+                  Paciente
+                  <select
+                    value={appointmentForm.patientId}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, patientId: event.target.value })}
+                    required
+                    disabled={loadingPatients}
+                  >
+                    <option value="">Selecciona un paciente</option>
+                    {patients.map((patient) => (
+                      <option value={patient.id} key={patient.id}>{patient.fullName}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Doctor temporal
+                  <select
+                    value={appointmentForm.doctorId}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, doctorId: event.target.value })}
+                    required
+                  >
+                    <option value="">Selecciona un doctor</option>
+                    {temporaryDoctors.map((doctor) => (
+                      <option value={doctor.id} key={doctor.id}>{doctor.id} - {doctor.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Cubiculo temporal
+                  <select
+                    value={appointmentForm.cubicleId}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, cubicleId: event.target.value })}
+                    required
+                  >
+                    <option value="">Selecciona un cubiculo</option>
+                    {temporaryCubicles.map((cubicle) => (
+                      <option value={cubicle.id} key={cubicle.id}>{cubicle.id} - {cubicle.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Fecha
+                  <input
+                    type="date"
+                    value={appointmentForm.date}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, date: event.target.value })}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Hora
+                  <input
+                    type="time"
+                    value={appointmentForm.time}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, time: event.target.value })}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Motivo
+                  <input
+                    value={appointmentForm.reason}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, reason: event.target.value })}
+                  />
+                </label>
+
+                <label className="appointment-form-wide">
+                  Observaciones
+                  <textarea
+                    value={appointmentForm.observations}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, observations: event.target.value })}
+                    rows="3"
+                  />
+                </label>
+
+                <label>
+                  Estado
+                  <select
+                    value={appointmentForm.status}
+                    onChange={(event) => setAppointmentForm({ ...appointmentForm, status: event.target.value })}
+                  >
+                    {appointmentStatuses.map((status) => <option value={status} key={status}>{status}</option>)}
+                  </select>
+                </label>
+
+                {appointmentFormError ? <p className="appointment-form-error">{appointmentFormError}</p> : null}
+
+                <div className="form-actions appointment-form-actions">
+                  <button type="button" className="secondary-button" onClick={() => setIsAppointmentFormOpen(false)}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="primary-button" disabled={savingAppointment || loadingPatients}>
+                    {savingAppointment ? "Guardando..." : appointmentFormMode === "edit" ? "Guardar cambios" : "Guardar cita"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -559,8 +990,64 @@ function Metric({ label, value }) {
   );
 }
 
+function AppointmentCard({
+  appointment,
+  onEdit,
+  onDelete,
+  onStatusChange,
+  deletingAppointmentId,
+  updatingAppointmentId
+}) {
+  const isBusy = deletingAppointmentId === appointment.id || updatingAppointmentId === appointment.id;
+
+  return (
+    <article className={`appointment ${statusClass(appointment.status)}`}>
+      <div className="appointment-details">
+        <strong>{appointment.time}</strong>
+        <span>{appointment.patientName}</span>
+        <small>{appointment.date} / {appointment.doctor} / {appointment.room}</small>
+      </div>
+      <div className="appointment-actions">
+        <button
+          type="button"
+          className="appointment-edit-button"
+          onClick={() => onEdit(appointment)}
+          disabled={isBusy}
+        >
+          Editar
+        </button>
+        <button
+          type="button"
+          className="appointment-delete-button"
+          onClick={() => onDelete(appointment)}
+          disabled={isBusy}
+        >
+          {deletingAppointmentId === appointment.id ? "Eliminando..." : "Eliminar"}
+        </button>
+        <div className="appointment-status-actions" aria-label={`Estado de cita de ${appointment.patientName}`}>
+          {["LLEGO", "EN_ESPERA", "FALTO"].map((status) => (
+            <button
+              type="button"
+              key={status}
+              className={`appointment-status-button ${statusClass(status)}${appointment.status === status ? " active" : ""}`}
+              onClick={() => onStatusChange(appointment, status)}
+              disabled={isBusy}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function statusClass(status) {
   return {
+    LLEGO: "arrived",
+    EN_ESPERA: "waiting",
+    FALTO: "missed",
+    CONFIRMADA: "",
     Llego: "arrived",
     Espera: "waiting",
     Falto: "missed"
