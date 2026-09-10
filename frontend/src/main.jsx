@@ -18,12 +18,6 @@ const navItems = [
   { key: "billing", label: "Pagos", icon: CreditCard }
 ];
 
-const temporaryDoctors = [
-  { id: 1, name: "Dra. Rivera" },
-  { id: 2, name: "Dr. Torres" },
-  { id: 3, name: "Dra. Lopez" }
-];
-
 const temporaryCubicles = [
   { id: 1, name: "Cubiculo 1" },
   { id: 2, name: "Cubiculo 2" },
@@ -273,6 +267,8 @@ function App() {
   const [doctorFormError, setDoctorFormError] = useState("");
   const [savingDoctor, setSavingDoctor] = useState(false);
   const [doctorSuccessMessage, setDoctorSuccessMessage] = useState("");
+  const [appointmentDoctors, setAppointmentDoctors] = useState([]);
+  const [loadingAppointmentDoctors, setLoadingAppointmentDoctors] = useState(false);
   const [appointments, setAppointments] = useState([]);
   const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(getTodayDateKey);
   const [appointmentView, setAppointmentView] = useState("daily");
@@ -406,6 +402,27 @@ function App() {
     }
   }, [isLoggedIn, activeSection]);
 
+  const fetchAppointmentDoctors = async () => {
+    setLoadingAppointmentDoctors(true);
+    try {
+      const response = await fetch("http://localhost:3000/api/doctors");
+      if (!response.ok) throw new Error("No se pudo cargar la lista de doctores");
+      const data = await response.json();
+      setAppointmentDoctors(data);
+    } catch (error) {
+      console.error(error);
+      setAppointmentDoctors([]);
+    } finally {
+      setLoadingAppointmentDoctors(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && activeSection === "appointments") {
+      fetchAppointmentDoctors();
+    }
+  }, [isLoggedIn, activeSection]);
+
   const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.active), [doctors]);
   const inactiveDoctors = useMemo(() => doctors.filter((doctor) => !doctor.active), [doctors]);
 
@@ -484,6 +501,7 @@ function App() {
       setDoctorSuccessMessage(isEditing ? "Doctor actualizado con éxito." : "Doctor registrado con éxito.");
       setTimeout(() => setDoctorSuccessMessage(""), 4000);
       await fetchDoctors();
+      await fetchAppointmentDoctors();
     } catch (error) {
       console.error(error);
       setDoctorFormError(error.message || "No se pudo guardar el doctor.");
@@ -512,6 +530,7 @@ function App() {
       setDoctorSuccessMessage(`Doctor ${doctor.name} desactivado.`);
       setTimeout(() => setDoctorSuccessMessage(""), 4000);
       await fetchDoctors();
+      await fetchAppointmentDoctors();
     } catch (error) {
       console.error(error);
       alert(error.message || "Error al desactivar al doctor.");
@@ -542,6 +561,7 @@ function App() {
       setDoctorSuccessMessage(`Doctor ${doctor.name} reactivado con éxito.`);
       setTimeout(() => setDoctorSuccessMessage(""), 4000);
       await fetchDoctors();
+      await fetchAppointmentDoctors();
     } catch (error) {
       console.error(error);
       alert(error.message || "Error al reactivar al doctor.");
@@ -605,6 +625,8 @@ function App() {
     setAppointmentFormError("");
     setIsAppointmentFormOpen(true);
 
+    await fetchAppointmentDoctors();
+
     if (patients.length === 0) {
       await fetchPatients();
     }
@@ -656,7 +678,7 @@ function App() {
     }
 
     const selectedPatient = patients.find((patient) => patient.id === Number(appointmentForm.patientId));
-    const selectedDoctor = temporaryDoctors.find((doctor) => doctor.id === Number(appointmentForm.doctorId));
+    const selectedDoctor = appointmentDoctors.find((doctor) => doctor.id === Number(appointmentForm.doctorId));
     const selectedCubicle = temporaryCubicles.find((cubicle) => cubicle.id === Number(appointmentForm.cubicleId));
 
     const payload = {
@@ -1539,11 +1561,19 @@ function App() {
                     value={appointmentForm.doctorId}
                     onChange={(event) => setAppointmentForm({ ...appointmentForm, doctorId: event.target.value })}
                     required
+                    disabled={loadingAppointmentDoctors}
                   >
-                    <option value="">Selecciona un doctor</option>
-                    {temporaryDoctors.map((doctor) => (
-                      <option value={doctor.id} key={doctor.id}>{doctor.id} - {doctor.name}</option>
+                    <option value="">{loadingAppointmentDoctors ? "Cargando doctores..." : "Selecciona un doctor"}</option>
+                    {appointmentDoctors.map((doctor) => (
+                      <option value={doctor.id} key={doctor.id}>{doctor.name}</option>
                     ))}
+                    {appointmentFormMode === "edit" &&
+                      appointmentForm.doctorId &&
+                      !appointmentDoctors.some((d) => String(d.id) === String(appointmentForm.doctorId)) && (
+                      <option value={appointmentForm.doctorId} disabled>
+                        {appointments.find((a) => a.id === editingAppointmentId)?.doctor || `Doctor #${appointmentForm.doctorId}`} (inactivo)
+                      </option>
+                    )}
                   </select>
                 </label>
 

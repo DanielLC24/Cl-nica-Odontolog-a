@@ -898,9 +898,14 @@ input {
 
 .doctors-table-row {
   display: grid;
-  grid-template-columns: 1.5fr 1.3fr 1.5fr 1.1fr;
+  grid-template-columns: 1.25fr 1.05fr 1.35fr 0.95fr 1.1fr;
   align-items: center;
+  gap: 16px;
   padding: 14px 12px;
+}
+
+.doctors-table-row.table-head span:last-child {
+  text-align: right;
 }
 
 .doctor-name-cell {
@@ -925,6 +930,94 @@ input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.doctor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.doctor-edit-button {
+  min-height: 34px;
+  padding: 0 14px;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+}
+
+.doctor-edit-button:hover {
+  background: #f8fafc;
+}
+
+.doctor-deactivate-button {
+  min-height: 34px;
+  padding: 0 14px;
+  color: #b42318;
+  background: #ffffff;
+  border: 1px solid #f1a7a0;
+  border-radius: 7px;
+}
+
+.doctor-deactivate-button:hover {
+  background: #fef2f2;
+}
+
+.inactive-doctors-section {
+  margin-top: 32px;
+}
+
+.inactive-card {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.inactive-card .table-head {
+  color: #7b8798;
+}
+
+.inactive-doctor-row {
+  background: #eef2f7;
+}
+
+.inactive-doctor-row:hover {
+  background: #e6ebf1;
+}
+
+.inactive-text {
+  color: #64748b;
+}
+
+.doctor-specialty-tag.inactive {
+  color: #64748b;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+}
+
+.doctor-activate-button {
+  min-height: 34px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: #0f766e;
+  border: 1px solid #0f766e;
+  border-radius: 7px;
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(15, 118, 110, 0.18);
+}
+
+.doctor-activate-button:hover {
+  background: #0d665f;
+  border-color: #0d665f;
+}
+
+.doctor-edit-button:disabled,
+.doctor-deactivate-button:disabled,
+.doctor-activate-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .doctors-state-box,
@@ -998,70 +1091,4 @@ input {
   color: #166534;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 0.95rem;
-}
-
-.doctors-success-banner p {
-  margin: 0;
-  font-weight: 500;
-}
-
-@media (max-width: 920px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: static;
-  }
-
-  .patients-layout,
-  .patient-form,
-  .doctor-form,
-  .appointment-form,
-  .metrics-grid,
-  .appointments,
-  .billing-summary,
-  .profile-grid {
-    grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .odontogram-grid {
-    grid-template-columns: repeat(8, minmax(36px, 1fr));
-  }
-
-  .appointment-week-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .content {
-    padding: 18px;
-  }
-
-  .appointment-detail-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .appointment-detail-wide {
-    grid-column: auto;
-  }
-
-  .topbar,
-  .section-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .appointment-week-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .topbar h1 {
-    font-size: 1.35rem;
-  }
 }
