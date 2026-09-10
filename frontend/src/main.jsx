@@ -256,7 +256,7 @@ function formatBirthDate(value) {
 }
 
 function getAppointmentConflictMessage(appointments, form, excludedId = null) {
-  if (!form.date || !form.time || !form.doctorId || !form.cubicleId) {
+  if (!form.date || !form.time || !form.patientId || !form.doctorId || !form.cubicleId) {
     return "";
   }
 
@@ -266,6 +266,9 @@ function getAppointmentConflictMessage(appointments, form, excludedId = null) {
     formatAppointmentTime(appointment.time) === form.time
   ));
 
+  const patientConflict = conflictingAppointments.some(
+    (appointment) => String(appointment.patientId) === String(form.patientId)
+  );
   const doctorConflict = conflictingAppointments.some(
     (appointment) => String(appointment.doctorId) === String(form.doctorId)
   );
@@ -273,6 +276,9 @@ function getAppointmentConflictMessage(appointments, form, excludedId = null) {
     (appointment) => String(appointment.cubicleId) === String(form.cubicleId)
   );
 
+  if (patientConflict) {
+    return "El paciente ya tiene una cita en ese horario.";
+  }
   if (doctorConflict && cubicleConflict) {
     return "El doctor ya tiene una cita y el cubículo ya está ocupado en ese horario.";
   }
@@ -880,7 +886,7 @@ function App() {
       return;
     }
 
-    if (appointmentForm.date === today && appointmentForm.time <= getCurrentTimeKey()) {
+    if (appointmentForm.date === today && appointmentForm.time < getCurrentTimeKey()) {
       setAppointmentFormError("No se puede agendar una cita en un horario que ya pasó");
       setSavingAppointment(false);
       return;

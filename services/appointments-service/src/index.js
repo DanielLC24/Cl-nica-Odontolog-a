@@ -149,7 +149,7 @@ async function normalizeExpiredAppointments() {
     `UPDATE appointments
      SET status = 'FALTO', updated_at = NOW()
      WHERE status = 'EN_ESPERA'
-      AND (appointment_date < $1 OR (appointment_date = $1 AND appointment_time <= $2))`,
+      AND (appointment_date < $1 OR (appointment_date = $1 AND appointment_time < $2))`,
     [current.date, current.time]
   );
 }
@@ -173,7 +173,7 @@ function isValidAppointmentTime(time) {
 
 function isAppointmentPast(date, time, current = getLocalDateTimeKeys()) {
   const appointmentTime = String(time).slice(0, 5);
-  return date < current.date || (date === current.date && appointmentTime <= current.time);
+  return date < current.date || (date === current.date && appointmentTime < current.time);
 }
 
 function getAppointmentFields(body) {
@@ -211,8 +211,17 @@ async function findAppointmentConflict(fields, excludedId = null) {
          FROM appointments
          WHERE appointment_date = $1
            AND appointment_time = $2
+           AND patient_id IS NOT NULL
+           AND patient_id = $3
+           AND ($4::integer IS NULL OR id <> $4)
+       ) AS patient_conflict,
+       EXISTS (
+         SELECT 1
+         FROM appointments
+         WHERE appointment_date = $1
+           AND appointment_time = $2
            AND doctor_id IS NOT NULL
-           AND doctor_id = $3
+           AND doctor_id = $5
            AND ($4::integer IS NULL OR id <> $4)
        ) AS doctor_conflict,
        EXISTS (
@@ -221,16 +230,20 @@ async function findAppointmentConflict(fields, excludedId = null) {
          WHERE appointment_date = $1
            AND appointment_time = $2
            AND cubicle_id IS NOT NULL
-           AND cubicle_id = $5
+           AND cubicle_id = $6
            AND ($4::integer IS NULL OR id <> $4)
        ) AS cubicle_conflict`,
-    [fields.date, fields.time, fields.doctorId, excludedId, fields.cubicleId]
+    [fields.date, fields.time, fields.patientId, excludedId, fields.doctorId, fields.cubicleId]
   );
 
   return result.rows[0];
 }
 
 function sendConflictResponse(res, conflict) {
+  if (conflict.patient_conflict) {
+    return res.status(409).json({ error: "El paciente ya tiene una cita en ese horario" });
+  }
+
   if (conflict.doctor_conflict && conflict.cubicle_conflict) {
     return res.status(409).json({ error: "El doctor ya tiene una cita y el cubículo ya está ocupado en ese horario" });
   }
