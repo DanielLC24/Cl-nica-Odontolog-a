@@ -3,10 +3,45 @@ import { createRoot } from "react-dom/client";
 import { Activity, CalendarDays, CreditCard, LayoutDashboard, Stethoscope, UserRound } from "lucide-react";
 import "./styles.css";
 
+const toothNames = {
+  1: "Inc. Central",
+  2: "Inc. Lateral",
+  3: "Canino",
+  4: "1er Premolar",
+  5: "2do Premolar",
+  6: "1er Molar",
+  7: "2do Molar",
+  8: "3er Molar",
+  9: "3er Molar",
+  10: "2do Molar",
+  11: "1er Molar",
+  12: "2do Premolar",
+  13: "1er Premolar",
+  14: "Canino",
+  15: "Inc. Lateral",
+  16: "Inc. Central",
+  17: "Inc. Central",
+  18: "Inc. Lateral",
+  19: "Canino",
+  20: "1er Premolar",
+  21: "2do Premolar",
+  22: "1er Molar",
+  23: "2do Molar",
+  24: "3er Molar",
+  25: "3er Molar",
+  26: "2do Molar",
+  27: "1er Molar",
+  28: "2do Premolar",
+  29: "1er Premolar",
+  30: "Canino",
+  31: "Inc. Lateral",
+  32: "Inc. Central"
+};
+
 const teeth = Array.from({ length: 32 }, (_, index) => {
   const id = index + 1;
   const states = ["Sano", "Sano", "Sano", "Caries", "Endodoncia"];
-  return { id, state: states[index % states.length] };
+  return { id, state: states[index % states.length], name: toothNames[id] };
 });
 
 const navItems = [
@@ -75,6 +110,8 @@ const emptyDoctorForm = {
   email: "",
   phone: ""
 };
+
+const odontogramStatuses = ["SANO", "CARIES", "ENDODONCIA", "EXTRACCION"];
 
 function formatDoctorPhoneInput(value) {
   if (!value) return "";
@@ -304,6 +341,11 @@ function App() {
   const [selectedAppointmentId, setSelectedAppointmentId] = useState(null);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState("");
+  const [selectedOdontogramPatientId, setSelectedOdontogramPatientId] = useState("");
+  const [odontogram, setOdontogram] = useState([]);
+  const [loadingOdontogram, setLoadingOdontogram] = useState(false);
+  const [savingOdontogramTooth, setSavingOdontogramTooth] = useState(false);
+  const [odontogramError, setOdontogramError] = useState("");
   const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
   const [appointmentFormMode, setAppointmentFormMode] = useState("create");
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);
@@ -437,10 +479,22 @@ function App() {
   };
 
   useEffect(() => {
-    if (isLoggedIn && activeSection === "patients") {
+    if (isLoggedIn && (activeSection === "patients" || activeSection === "odontogram")) {
       fetchPatients();
     }
   }, [isLoggedIn, activeSection]);
+
+  useEffect(() => {
+    if (activeSection === "odontogram" && patients.length > 0 && !selectedOdontogramPatientId) {
+      setSelectedOdontogramPatientId(String(patients[0].id));
+    }
+  }, [activeSection, patients, selectedOdontogramPatientId]);
+
+  useEffect(() => {
+    if (activeSection === "odontogram" && selectedOdontogramPatientId) {
+      fetchOdontogram(selectedOdontogramPatientId);
+    }
+  }, [activeSection, selectedOdontogramPatientId]);
 
   useEffect(() => {
     if (selectedPatientId) {
@@ -614,6 +668,78 @@ function App() {
       alert(error.message || "Error al reactivar al doctor.");
     } finally {
       setActivatingDoctorId(null);
+    }
+  };
+
+  const fetchOdontogram = async (patientId) => {
+    if (!patientId) {
+      setOdontogram([]);
+      return;
+    }
+
+    setLoadingOdontogram(true);
+    setOdontogramError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/odontogram/patient/${patientId}`);
+      if (!response.ok) {
+        throw new Error("No se pudo cargar el odontograma del paciente");
+      }
+
+      const data = await response.json();
+      setOdontogram(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      setOdontogram([]);
+      setOdontogramError(error.message || "No se pudo cargar el odontograma.");
+    } finally {
+      setLoadingOdontogram(false);
+    }
+  };
+
+  const saveOdontogramTooth = async (toothId) => {
+    if (!selectedOdontogramPatientId) {
+      return;
+    }
+
+    const existing = odontogram.find((item) => item.toothId === String(toothId));
+    const oneStepAfter = odontogramStatuses.indexOf(existing?.status || "SANO") + 1;
+    const nextStatus = odontogramStatuses[oneStepAfter % odontogramStatuses.length];
+
+    setSavingOdontogramTooth(true);
+    setOdontogramError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/odontogram/patient/${selectedOdontogramPatientId}/tooth/${toothId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: nextStatus,
+          notes: existing?.notes || ""
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo guardar el estado del diente");
+      }
+
+      const toothData = await response.json();
+      setOdontogram((current) => {
+        const existingIndex = current.findIndex((item) => item.toothId === String(toothId));
+        if (existingIndex >= 0) {
+          const next = [...current];
+          next[existingIndex] = toothData;
+          return next;
+        }
+
+        return [...current, toothData];
+      });
+    } catch (error) {
+      console.error(error);
+      setOdontogramError(error.message || "No se pudo guardar el diente.");
+    } finally {
+      setSavingOdontogramTooth(false);
     }
   };
 
@@ -1734,19 +1860,85 @@ function App() {
           <section id="odontogram" className="panel">
             <div className="section-heading">
               <h2>Odontograma</h2>
-              <select aria-label="Paciente del odontograma">
-                <option>Ana Martinez</option>
-                <option>Carlos Ruiz</option>
-                <option>Sofia Herrera</option>
+              <select
+                aria-label="Paciente del odontograma"
+                value={selectedOdontogramPatientId}
+                onChange={(event) => setSelectedOdontogramPatientId(event.target.value)}
+                disabled={loadingPatients}
+              >
+                <option value="">Selecciona un paciente</option>
+                {patients.map((patient) => (
+                  <option value={patient.id} key={patient.id}>{patient.fullName}</option>
+                ))}
               </select>
             </div>
-            <div className="odontogram-grid">
-              {teeth.map((tooth) => (
-                <button className={`tooth ${tooth.state.toLowerCase()}`} type="button" key={tooth.id} title={`Diente ${tooth.id}: ${tooth.state}`}>
-                  <span>{tooth.id}</span>
-                </button>
-              ))}
-            </div>
+
+            {odontogramError && <p className="odontogram-error">{odontogramError}</p>}
+
+            {loadingOdontogram ? (
+              <p>Cargando odontograma...</p>
+            ) : (
+              <div className="odontogram-board">
+                <div className="odontogram-legend">
+                  <span><i className="legend-dot legend-sano" />Sano</span>
+                  <span><i className="legend-dot legend-caries" />Caries</span>
+                  <span><i className="legend-dot legend-endodoncia" />Endodoncia</span>
+                  <span><i className="legend-dot legend-extraccion" />Extracción</span>
+                </div>
+
+                <div className="odontogram-arches">
+                  <div className="odontogram-zone">
+                    <div className="odontogram-zone-title">
+                      <span>Arcada superior</span>
+                    </div>
+                    <div className="odontogram-grid upper-grid">
+                      {teeth.slice(0, 16).map((tooth) => {
+                        const toothRecord = odontogram.find((item) => item.toothId === String(tooth.id));
+                        const status = toothRecord?.status || "SANO";
+                        return (
+                          <button
+                            className={`tooth ${String(status).toLowerCase()}`}
+                            type="button"
+                            key={tooth.id}
+                            disabled={savingOdontogramTooth || !selectedOdontogramPatientId}
+                            title={`${tooth.name}: ${status}`}
+                            onClick={() => saveOdontogramTooth(tooth.id)}
+                          >
+                            <span className="tooth-name">{tooth.name}</span>
+                            <span className="tooth-status">{status}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="odontogram-zone">
+                    <div className="odontogram-zone-title">
+                      <span>Arcada inferior</span>
+                    </div>
+                    <div className="odontogram-grid lower-grid">
+                      {teeth.slice(16, 32).map((tooth) => {
+                        const toothRecord = odontogram.find((item) => item.toothId === String(tooth.id));
+                        const status = toothRecord?.status || "SANO";
+                        return (
+                          <button
+                            className={`tooth ${String(status).toLowerCase()}`}
+                            type="button"
+                            key={tooth.id}
+                            disabled={savingOdontogramTooth || !selectedOdontogramPatientId}
+                            title={`${tooth.name}: ${status}`}
+                            onClick={() => saveOdontogramTooth(tooth.id)}
+                          >
+                            <span className="tooth-name">{tooth.name}</span>
+                            <span className="tooth-status">{status}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
         )}
 
