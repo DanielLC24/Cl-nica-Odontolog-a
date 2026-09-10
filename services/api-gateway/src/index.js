@@ -14,7 +14,8 @@ const routes = [
   ["/api/patients", process.env.PATIENTS_SERVICE_URL || "http://localhost:3002"],
   ["/api/appointments", process.env.APPOINTMENTS_SERVICE_URL || "http://localhost:3003"],
   ["/api/odontogram", process.env.ODONTOGRAM_SERVICE_URL || "http://localhost:3004"],
-  ["/api/billing", process.env.BILLING_SERVICE_URL || "http://localhost:3005"]
+  ["/api/billing", process.env.BILLING_SERVICE_URL || "http://localhost:3005"],
+  ["/api/doctors", process.env.DOCTORS_SERVICE_URL || "http://localhost:3006"]
 ];
 
 app.use(cors());

@@ -16,12 +16,14 @@ services:
       PORT: 3000
       AUTH_SERVICE_URL: http://auth-service:3001
       PATIENTS_SERVICE_URL: http://patients-service:3002
+      DOCTORS_SERVICE_URL: http://doctors-service:3006
       APPOINTMENTS_SERVICE_URL: http://appointments-service:3003
       ODONTOGRAM_SERVICE_URL: http://odontogram-service:3004
       BILLING_SERVICE_URL: http://billing-service:3005
     depends_on:
       - auth-service
       - patients-service
+      - doctors-service
       - appointments-service
       - odontogram-service
       - billing-service
@@ -46,6 +48,16 @@ services:
       DATABASE_URL: postgres://patients_user:patients_pass@patients-db:5432/patients_db
     depends_on:
       - patients-db
+
+  doctors-service:
+    build: ./services/doctors-service
+    ports:
+      - "3006:3006"
+    environment:
+      PORT: 3006
+      DATABASE_URL: postgres://doctors_user:doctors_pass@doctors-db:5432/doctors_db
+    depends_on:
+      - doctors-db
 
   appointments-service:
     build: ./services/appointments-service
@@ -95,6 +107,15 @@ services:
     volumes:
       - patients-data:/var/lib/postgresql/data
 
+  doctors-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: doctors_user
+      POSTGRES_PASSWORD: doctors_pass
+      POSTGRES_DB: doctors_db
+    volumes:
+      - doctors-data:/var/lib/postgresql/data
+
   appointments-db:
     image: postgres:16-alpine
     environment:
@@ -142,6 +163,7 @@ services:
 volumes:
   auth-data:
   patients-data:
+  doctors-data:
   appointments-data:
   odontogram-data:
   billing-data:

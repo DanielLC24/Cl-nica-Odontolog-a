@@ -13,6 +13,7 @@ const navItems = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { key: "patients", label: "Pacientes", icon: UserRound },
   { key: "appointments", label: "Agenda", icon: CalendarDays },
+  { key: "doctors", label: "Doctores", icon: Stethoscope },
   { key: "odontogram", label: "Odontograma", icon: Activity },
   { key: "billing", label: "Pagos", icon: CreditCard }
 ];
@@ -58,6 +59,34 @@ const emptyAppointmentForm = {
   observations: "",
   status: "EN_ESPERA"
 };
+
+const emptyDoctorForm = {
+  name: "",
+  specialty: "",
+  email: "",
+  phone: ""
+};
+
+function formatDoctorPhoneInput(value) {
+  if (!value) return "";
+  const digits = String(value).replace(/\D/g, "").slice(0, 10);
+  if (digits.length <= 3) {
+    return digits;
+  }
+  if (digits.length <= 7) {
+    return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  }
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 10)}`;
+}
+
+function formatDoctorTablePhone(phone) {
+  if (!phone) return "No registrado";
+  const digits = String(phone).replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7, 10)}`;
+  }
+  return phone;
+}
 
 const validCredentials = {
   "admin@clinica.test": "admin123",
@@ -232,6 +261,18 @@ function App() {
   const [loginError, setLoginError] = useState("");
   const [patients, setPatients] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
+  const [doctors, setDoctors] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [doctorsError, setDoctorsError] = useState("");
+  const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
+  const [doctorModalMode, setDoctorModalMode] = useState("create");
+  const [editingDoctorId, setEditingDoctorId] = useState(null);
+  const [deactivatingDoctorId, setDeactivatingDoctorId] = useState(null);
+  const [activatingDoctorId, setActivatingDoctorId] = useState(null);
+  const [doctorForm, setDoctorForm] = useState(emptyDoctorForm);
+  const [doctorFormError, setDoctorFormError] = useState("");
+  const [savingDoctor, setSavingDoctor] = useState(false);
+  const [doctorSuccessMessage, setDoctorSuccessMessage] = useState("");
   const [appointments, setAppointments] = useState([]);
   const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(getTodayDateKey);
   const [appointmentView, setAppointmentView] = useState("daily");
@@ -339,6 +380,175 @@ function App() {
       fetchPatients();
     }
   }, [isLoggedIn, activeSection]);
+
+  const fetchDoctors = async () => {
+    setLoadingDoctors(true);
+    setDoctorsError("");
+    try {
+      const response = await fetch("http://localhost:3000/api/doctors?includeInactive=true");
+      if (!response.ok) {
+        throw new Error("No se pudo cargar la lista de doctores");
+      }
+      const data = await response.json();
+      setDoctors(data);
+    } catch (error) {
+      console.error(error);
+      setDoctors([]);
+      setDoctorsError("No se pudo cargar la lista de doctores. Verifica que el backend esté disponible.");
+    } finally {
+      setLoadingDoctors(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && activeSection === "doctors") {
+      fetchDoctors();
+    }
+  }, [isLoggedIn, activeSection]);
+
+  const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.active), [doctors]);
+  const inactiveDoctors = useMemo(() => doctors.filter((doctor) => !doctor.active), [doctors]);
+
+  const openDoctorModal = () => {
+    setDoctorModalMode("create");
+    setEditingDoctorId(null);
+    setDoctorForm(emptyDoctorForm);
+    setDoctorFormError("");
+    setIsDoctorModalOpen(true);
+  };
+
+  const openEditDoctorModal = (doctor) => {
+    setDoctorModalMode("edit");
+    setEditingDoctorId(doctor.id);
+    setDoctorForm({
+      name: doctor.name || "",
+      specialty: doctor.specialty || "",
+      email: doctor.email || "",
+      phone: doctor.phone ? String(doctor.phone).replace(/\D/g, "").slice(0, 10) : ""
+    });
+    setDoctorFormError("");
+    setIsDoctorModalOpen(true);
+  };
+
+  const closeDoctorModal = () => {
+    setDoctorModalMode("create");
+    setEditingDoctorId(null);
+    setDoctorForm(emptyDoctorForm);
+    setDoctorFormError("");
+    setIsDoctorModalOpen(false);
+  };
+
+  const handleSaveDoctor = async (event) => {
+    event.preventDefault();
+    setDoctorFormError("");
+
+    const trimmedName = doctorForm.name.trim();
+    const trimmedSpecialty = doctorForm.specialty.trim();
+    const cleanPhone = doctorForm.phone ? String(doctorForm.phone).replace(/\D/g, "").slice(0, 10) : "";
+
+    if (!trimmedName || !trimmedSpecialty) {
+      setDoctorFormError("El nombre y la especialidad son obligatorios.");
+      return;
+    }
+
+    if (cleanPhone && cleanPhone.length !== 10) {
+      setDoctorFormError("El teléfono debe contener exactamente 10 dígitos o dejarse vacío.");
+      return;
+    }
+
+    setSavingDoctor(true);
+    try {
+      const isEditing = doctorModalMode === "edit" && editingDoctorId;
+      const url = isEditing
+        ? `http://localhost:3000/api/doctors/${editingDoctorId}`
+        : "http://localhost:3000/api/doctors";
+      const method = isEditing ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmedName,
+          specialty: trimmedSpecialty,
+          email: doctorForm.email.trim() || undefined,
+          phone: cleanPhone || null
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || (isEditing ? "Error al actualizar el doctor" : "Error al registrar el doctor"));
+      }
+
+      closeDoctorModal();
+      setDoctorSuccessMessage(isEditing ? "Doctor actualizado con éxito." : "Doctor registrado con éxito.");
+      setTimeout(() => setDoctorSuccessMessage(""), 4000);
+      await fetchDoctors();
+    } catch (error) {
+      console.error(error);
+      setDoctorFormError(error.message || "No se pudo guardar el doctor.");
+    } finally {
+      setSavingDoctor(false);
+    }
+  };
+
+  const handleDeactivateDoctor = async (doctor) => {
+    const confirmed = window.confirm(`¿Deseas desactivar al doctor ${doctor.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeactivatingDoctorId(doctor.id);
+    try {
+      const response = await fetch(`http://localhost:3000/api/doctors/${doctor.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || "No se pudo desactivar el doctor");
+      }
+
+      setDoctorSuccessMessage(`Doctor ${doctor.name} desactivado.`);
+      setTimeout(() => setDoctorSuccessMessage(""), 4000);
+      await fetchDoctors();
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al desactivar al doctor.");
+    } finally {
+      setDeactivatingDoctorId(null);
+    }
+  };
+
+  const handleActivateDoctor = async (doctor) => {
+    const confirmed = window.confirm(`¿Deseas reactivar al doctor ${doctor.name}?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setActivatingDoctorId(doctor.id);
+    try {
+      const response = await fetch(`http://localhost:3000/api/doctors/${doctor.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: true })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || "No se pudo reactivar el doctor");
+      }
+
+      setDoctorSuccessMessage(`Doctor ${doctor.name} reactivado con éxito.`);
+      setTimeout(() => setDoctorSuccessMessage(""), 4000);
+      await fetchDoctors();
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "Error al reactivar al doctor.");
+    } finally {
+      setActivatingDoctorId(null);
+    }
+  };
 
   const filteredPatients = useMemo(() => {
     if (!searchTerm.trim()) {
@@ -1032,6 +1242,220 @@ function App() {
                 deletingAppointmentId={deletingAppointmentId}
                 updatingAppointmentId={updatingAppointmentId}
               />
+            )}
+          </section>
+        )}
+
+        {activeSection === "doctors" && (
+          <section className="panel doctors-panel">
+            <div className="section-heading">
+              <div>
+                <h2>Gestión de Doctores</h2>
+                <p className="section-subtitle">Especialistas disponibles en la clínica</p>
+              </div>
+              <button type="button" className="primary-button" onClick={openDoctorModal}>
+                + Nuevo doctor
+              </button>
+            </div>
+
+            {doctorSuccessMessage && (
+              <div className="doctors-success-banner">
+                <p>{doctorSuccessMessage}</p>
+                <button type="button" className="close-button" onClick={() => setDoctorSuccessMessage("")}>✕</button>
+              </div>
+            )}
+
+            {loadingDoctors && (
+              <div className="doctors-state-box">
+                <p>Cargando doctores...</p>
+              </div>
+            )}
+
+            {!loadingDoctors && doctorsError && (
+              <div className="doctors-error-banner">
+                <p>{doctorsError}</p>
+                <button type="button" className="secondary-button" onClick={fetchDoctors}>
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {!loadingDoctors && !doctorsError && doctors.length === 0 && (
+              <div className="doctors-empty-box">
+                <p>No hay doctores registrados en el sistema.</p>
+              </div>
+            )}
+
+            {!loadingDoctors && !doctorsError && doctors.length > 0 && activeDoctors.length === 0 && (
+              <div className="doctors-empty-box">
+                <p>No hay doctores activos registrados en el sistema.</p>
+              </div>
+            )}
+
+            {!loadingDoctors && !doctorsError && activeDoctors.length > 0 && (
+              <div className="doctors-table-card">
+                <div className="table doctors-table">
+                  <div className="table-row table-head doctors-table-row">
+                    <span>Nombre</span>
+                    <span>Especialidad</span>
+                    <span>Correo</span>
+                    <span>Teléfono</span>
+                    <span>Acciones</span>
+                  </div>
+                  {activeDoctors.map((doctor) => (
+                    <div key={doctor.id} className="table-row doctors-table-row">
+                      <span className="doctor-name-cell">
+                        <strong>{doctor.name}</strong>
+                      </span>
+                      <span>
+                        <span className="doctor-specialty-tag">{doctor.specialty || "General"}</span>
+                      </span>
+                      <span className="doctor-meta-cell">{doctor.email || "No registrado"}</span>
+                      <span className="doctor-meta-cell">{formatDoctorTablePhone(doctor.phone)}</span>
+                      <div className="doctor-actions">
+                        <button
+                          type="button"
+                          className="doctor-edit-button"
+                          onClick={() => openEditDoctorModal(doctor)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="doctor-deactivate-button"
+                          onClick={() => handleDeactivateDoctor(doctor)}
+                          disabled={deactivatingDoctorId === doctor.id}
+                        >
+                          {deactivatingDoctorId === doctor.id ? "Desactivando..." : "Desactivar"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!loadingDoctors && !doctorsError && inactiveDoctors.length > 0 && (
+              <div className="inactive-doctors-section">
+                <div className="section-heading">
+                  <div>
+                    <h3>Doctores desactivados</h3>
+                    <p className="section-subtitle">Especialistas dados de baja lógica que no están disponibles para citas</p>
+                  </div>
+                </div>
+
+                <div className="doctors-table-card inactive-card">
+                  <div className="table doctors-table">
+                    <div className="table-row table-head doctors-table-row">
+                      <span>Nombre</span>
+                      <span>Especialidad</span>
+                      <span>Correo</span>
+                      <span>Teléfono</span>
+                      <span>Acciones</span>
+                    </div>
+                    {inactiveDoctors.map((doctor) => (
+                      <div key={doctor.id} className="table-row doctors-table-row inactive-doctor-row">
+                        <span className="doctor-name-cell inactive-text">
+                          <strong>{doctor.name}</strong>
+                        </span>
+                        <span>
+                          <span className="doctor-specialty-tag inactive">{doctor.specialty || "General"}</span>
+                        </span>
+                        <span className="doctor-meta-cell inactive-text">{doctor.email || "No registrado"}</span>
+                        <span className="doctor-meta-cell inactive-text">{formatDoctorTablePhone(doctor.phone)}</span>
+                        <div className="doctor-actions">
+                          <button
+                            type="button"
+                            className="doctor-edit-button"
+                            onClick={() => openEditDoctorModal(doctor)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="doctor-activate-button"
+                            onClick={() => handleActivateDoctor(doctor)}
+                            disabled={activatingDoctorId === doctor.id}
+                          >
+                            {activatingDoctorId === doctor.id ? "Activando..." : "Activar"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isDoctorModalOpen && (
+              <div className="modal-backdrop">
+                <div className="modal-card">
+                  <div className="section-heading">
+                    <h3>{doctorModalMode === "create" ? "Nuevo doctor" : "Editar doctor"}</h3>
+                    <button type="button" className="close-button" onClick={closeDoctorModal}>Cerrar</button>
+                  </div>
+
+                  <form className="doctor-form" onSubmit={handleSaveDoctor}>
+                    {doctorFormError && (
+                      <p className="doctor-form-error">{doctorFormError}</p>
+                    )}
+
+                    <label>
+                      Nombre *
+                      <input
+                        value={doctorForm.name}
+                        onChange={(event) => setDoctorForm({ ...doctorForm, name: event.target.value })}
+                        placeholder="Ej. Dra. Rivera"
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Especialidad *
+                      <input
+                        value={doctorForm.specialty}
+                        onChange={(event) => setDoctorForm({ ...doctorForm, specialty: event.target.value })}
+                        placeholder="Ej. Ortodoncia"
+                        required
+                      />
+                    </label>
+
+                    <label>
+                      Correo
+                      <input
+                        type="email"
+                        value={doctorForm.email}
+                        onChange={(event) => setDoctorForm({ ...doctorForm, email: event.target.value })}
+                        placeholder="doctor@clinica.test"
+                      />
+                    </label>
+
+                    <label>
+                      Teléfono
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={12}
+                        value={formatDoctorPhoneInput(doctorForm.phone)}
+                        onChange={(event) => {
+                          const onlyDigits = event.target.value.replace(/\D/g, "").slice(0, 10);
+                          setDoctorForm({ ...doctorForm, phone: onlyDigits });
+                        }}
+                        placeholder="000-0000-000"
+                      />
+                    </label>
+
+                    <div className="form-actions">
+                      <button type="button" className="secondary-button" onClick={closeDoctorModal} disabled={savingDoctor}>
+                        Cancelar
+                      </button>
+                      <button type="submit" className="primary-button" disabled={savingDoctor}>
+                        {savingDoctor ? "Guardando..." : (doctorModalMode === "create" ? "Guardar doctor" : "Guardar cambios")}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
             )}
           </section>
         )}
