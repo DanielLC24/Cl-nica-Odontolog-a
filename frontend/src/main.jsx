@@ -49,6 +49,15 @@ const emptyForm = {
   medicalAlerts: ""
 };
 
+const emptyClinicalRecordForm = {
+  reasonForVisit: "",
+  diagnosis: "",
+  observations: "",
+  allergies: "",
+  chronicConditions: "",
+  currentMedications: ""
+};
+
 const emptyAppointmentForm = {
   patientId: "",
   doctorId: "",
@@ -199,6 +208,22 @@ function formatAppointmentTimeOption(time) {
   return `${String(displayHours).padStart(2, "0")}:${String(minutes).padStart(2, "0")} ${period}`;
 }
 
+function formatBirthDate(value) {
+  if (!value) {
+    return "No registrada";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getAppointmentConflictMessage(appointments, form, excludedId = null) {
   if (!form.date || !form.time || !form.doctorId || !form.cubicleId) {
     return "";
@@ -291,10 +316,15 @@ function App() {
   const [appointmentStatusError, setAppointmentStatusError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [selectedPatientDetail, setSelectedPatientDetail] = useState(null);
+  const [loadingSelectedPatientDetail, setLoadingSelectedPatientDetail] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isClinicalRecordFormOpen, setIsClinicalRecordFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("create");
   const [formState, setFormState] = useState(emptyForm);
   const [savingPatient, setSavingPatient] = useState(false);
+  const [clinicalRecordForm, setClinicalRecordForm] = useState(emptyClinicalRecordForm);
+  const [savingClinicalRecord, setSavingClinicalRecord] = useState(false);
   const [, setClockTick] = useState(0);
   const availableAppointmentTimes = getAvailableAppointmentTimes(appointmentForm.date);
 
@@ -375,11 +405,48 @@ function App() {
     }
   };
 
+  const fetchPatientDetail = async (patientId) => {
+    if (!patientId) {
+      setSelectedPatientDetail(null);
+      return;
+    }
+
+    setLoadingSelectedPatientDetail(true);
+    try {
+      const response = await fetch(`http://localhost:3000/api/patients/${patientId}`);
+      if (!response.ok) {
+        throw new Error("No se pudo cargar el expediente del paciente");
+      }
+
+      const patient = await response.json();
+      setSelectedPatientDetail(patient);
+      setClinicalRecordForm({
+        reasonForVisit: patient.clinicalRecord?.reasonForVisit || "",
+        diagnosis: patient.clinicalRecord?.diagnosis || "",
+        observations: patient.clinicalRecord?.observations || "",
+        allergies: patient.clinicalRecord?.allergies || "",
+        chronicConditions: patient.clinicalRecord?.chronicConditions || "",
+        currentMedications: patient.clinicalRecord?.currentMedications || ""
+      });
+    } catch (error) {
+      console.error(error);
+      setSelectedPatientDetail(null);
+    } finally {
+      setLoadingSelectedPatientDetail(false);
+    }
+  };
+
   useEffect(() => {
     if (isLoggedIn && activeSection === "patients") {
       fetchPatients();
     }
   }, [isLoggedIn, activeSection]);
+
+  useEffect(() => {
+    if (selectedPatientId) {
+      fetchPatientDetail(selectedPatientId);
+    }
+  }, [selectedPatientId]);
 
   const fetchDoctors = async () => {
     setLoadingDoctors(true);
@@ -565,6 +632,22 @@ function App() {
     () => patients.find((patient) => patient.id === selectedPatientId) || filteredPatients[0] || null,
     [patients, filteredPatients, selectedPatientId]
   );
+
+  const selectedPatientAppointments = useMemo(() => {
+    if (!selectedPatientDetail?.id) {
+      return [];
+    }
+
+    return appointments
+      .filter((appointment) => String(appointment.patientId) === String(selectedPatientDetail.id))
+      .sort((first, second) => {
+        const dateCompare = String(first.date || "").localeCompare(String(second.date || ""));
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+        return String(first.time || "").localeCompare(String(second.time || ""));
+      });
+  }, [appointments, selectedPatientDetail]);
 
   useEffect(() => {
     if (selectedPatient && !filteredPatients.some((patient) => patient.id === selectedPatient.id)) {
@@ -799,6 +882,22 @@ function App() {
     }
   };
 
+  const openClinicalRecordForm = () => {
+    if (!selectedPatientDetail) {
+      return;
+    }
+
+    setClinicalRecordForm({
+      reasonForVisit: selectedPatientDetail.clinicalRecord?.reasonForVisit || "",
+      diagnosis: selectedPatientDetail.clinicalRecord?.diagnosis || "",
+      observations: selectedPatientDetail.clinicalRecord?.observations || "",
+      allergies: selectedPatientDetail.clinicalRecord?.allergies || "",
+      chronicConditions: selectedPatientDetail.clinicalRecord?.chronicConditions || "",
+      currentMedications: selectedPatientDetail.clinicalRecord?.currentMedications || ""
+    });
+    setIsClinicalRecordFormOpen(true);
+  };
+
   const openEditForm = (patient) => {
     setFormMode("edit");
     setFormState({
@@ -811,6 +910,41 @@ function App() {
     });
     setSelectedPatientId(patient.id);
     setIsFormOpen(true);
+  };
+
+  const handleSaveClinicalRecord = async (event) => {
+    event.preventDefault();
+
+    if (!selectedPatientDetail?.id) {
+      return;
+    }
+
+    setSavingClinicalRecord(true);
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/patients/${selectedPatientDetail.id}/clinical-record`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clinicalRecordForm)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo guardar el expediente clínico");
+      }
+
+      const updatedClinicalRecord = await response.json();
+      setSelectedPatientDetail({
+        ...selectedPatientDetail,
+        clinicalRecord: updatedClinicalRecord
+      });
+      setIsClinicalRecordFormOpen(false);
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "No se pudo guardar el expediente clínico");
+    } finally {
+      setSavingClinicalRecord(false);
+    }
   };
 
   const handleSavePatient = async (event) => {
@@ -1013,8 +1147,11 @@ function App() {
                       <button
                         key={patient.id}
                         type="button"
-                        className={selectedPatient?.id === patient.id ? "patient-row active" : "patient-row"}
-                        onClick={() => setSelectedPatientId(patient.id)}
+                        className={selectedPatientDetail?.id === patient.id ? "patient-row active" : "patient-row"}
+                        onClick={async () => {
+                          setSelectedPatientId(patient.id);
+                          await fetchPatientDetail(patient.id);
+                        }}
                       >
                         <span>{patient.fullName}</span>
                         <span>{patient.phone}</span>
@@ -1028,46 +1165,116 @@ function App() {
               </div>
 
               <div className="patient-profile-card">
-                {selectedPatient ? (
+                {loadingSelectedPatientDetail ? (
+                  <p>Cargando expediente...</p>
+                ) : selectedPatientDetail ? (
                   <>
                     <div className="profile-header">
                       <div>
                         <p className="badge">Paciente</p>
-                        <h3>{selectedPatient.fullName}</h3>
+                        <h3>{selectedPatientDetail.fullName}</h3>
                       </div>
-                      <button type="button" className="secondary-button" onClick={() => openEditForm(selectedPatient)}>
-                        Editar
-                      </button>
+                      <div className="profile-actions">
+                        <button type="button" className="secondary-button" onClick={() => openEditForm(selectedPatientDetail)}>
+                          Editar paciente
+                        </button>
+                        <button type="button" className="primary-button" onClick={openClinicalRecordForm}>
+                          Editar expediente
+                        </button>
+                      </div>
                     </div>
 
                     <div className="profile-grid">
                       <div>
                         <span>Teléfono</span>
-                        <strong>{selectedPatient.phone}</strong>
+                        <strong>{selectedPatientDetail.phone}</strong>
                       </div>
                       <div>
                         <span>Correo</span>
-                        <strong>{selectedPatient.email || "No registrado"}</strong>
+                        <strong>{selectedPatientDetail.email || "No registrado"}</strong>
                       </div>
                       <div>
                         <span>Fecha de nacimiento</span>
-                        <strong>{selectedPatient.birthDate || "No registrada"}</strong>
+                        <strong>{formatBirthDate(selectedPatientDetail.birthDate)}</strong>
                       </div>
                       <div>
                         <span>Dirección</span>
-                        <strong>{selectedPatient.address || "No registrada"}</strong>
+                        <strong>{selectedPatientDetail.address || "No registrada"}</strong>
                       </div>
                     </div>
 
                     <div className="profile-alerts">
                       <h4>Alertas médicas</h4>
                       <ul>
-                        {selectedPatient.medicalAlerts?.length ? (
-                          selectedPatient.medicalAlerts.map((alert) => <li key={alert}>{alert}</li>)
+                        {selectedPatientDetail.medicalAlerts?.length ? (
+                          selectedPatientDetail.medicalAlerts.map((alert) => <li key={alert}>{alert}</li>)
                         ) : (
                           <li>Sin alertas</li>
                         )}
                       </ul>
+                    </div>
+
+                    <div className="patient-appointments-card">
+                      <div className="clinical-card-title">
+                        <h4>Citas del paciente</h4>
+                        <span className="appointment-count">{selectedPatientAppointments.length}</span>
+                      </div>
+
+                      {selectedPatientAppointments.length === 0 ? (
+                        <p className="muted">Sin citas registradas.</p>
+                      ) : (
+                        <div className="appointments-history-list">
+                          {selectedPatientAppointments.map((appointment) => (
+                            <div className="history-appointment-row" key={appointment.id}>
+                              <div className="history-appointment-top">
+                                <span className="history-date">{formatAppointmentDate(appointment.date?.slice(0, 10))}</span>
+                                <span className="history-time">{formatAppointmentTimeOption(formatAppointmentTime(appointment.time))}</span>
+                                <span className={`history-status history-${appointment.status?.toLowerCase()}`}>{formatAppointmentStatus(appointment.status)}</span>
+                              </div>
+                              <div className="history-appointment-meta">
+                                <span><strong>Doctor:</strong> {appointment.doctor || "Sin doctor"}</span>
+                                <span><strong>Cubículo:</strong> {appointment.room || "Sin cubículo"}</span>
+                              </div>
+                              <div className="history-appointment-reason">
+                                <span><strong>Motivo:</strong> {appointment.reason || "Sin motivo registrado"}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="clinical-card">
+                      <div className="clinical-card-title">
+                        <h4>Expediente clínico</h4>
+                      </div>
+
+                      <div className="clinical-grid">
+                        <div>
+                          <span>Motivo de visita</span>
+                          <strong>{selectedPatientDetail.clinicalRecord?.reasonForVisit || "No registrado"}</strong>
+                        </div>
+                        <div>
+                          <span>Diagnóstico</span>
+                          <strong>{selectedPatientDetail.clinicalRecord?.diagnosis || "No registrado"}</strong>
+                        </div>
+                        <div>
+                          <span>Observaciones</span>
+                          <strong>{selectedPatientDetail.clinicalRecord?.observations || "No registradas"}</strong>
+                        </div>
+                        <div>
+                          <span>Alergias</span>
+                          <strong>{selectedPatientDetail.clinicalRecord?.allergies || "No registradas"}</strong>
+                        </div>
+                        <div>
+                          <span>Condiciones crónicas</span>
+                          <strong>{selectedPatientDetail.clinicalRecord?.chronicConditions || "No registradas"}</strong>
+                        </div>
+                        <div>
+                          <span>Medicación actual</span>
+                          <strong>{selectedPatientDetail.clinicalRecord?.currentMedications || "No registrada"}</strong>
+                        </div>
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -1075,6 +1282,69 @@ function App() {
                 )}
               </div>
             </div>
+
+            {isClinicalRecordFormOpen && (
+              <div className="modal-backdrop">
+                <div className="modal-card clinical-modal">
+                  <div className="section-heading">
+                    <h3>Expediente clínico</h3>
+                    <button type="button" className="close-button" onClick={() => setIsClinicalRecordFormOpen(false)}>Cerrar</button>
+                  </div>
+
+                  <form className="patient-form clinical-form" onSubmit={handleSaveClinicalRecord}>
+                    <label>
+                      Motivo de visita
+                      <textarea
+                        value={clinicalRecordForm.reasonForVisit}
+                        onChange={(event) => setClinicalRecordForm({ ...clinicalRecordForm, reasonForVisit: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Diagnóstico
+                      <textarea
+                        value={clinicalRecordForm.diagnosis}
+                        onChange={(event) => setClinicalRecordForm({ ...clinicalRecordForm, diagnosis: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Observaciones
+                      <textarea
+                        value={clinicalRecordForm.observations}
+                        onChange={(event) => setClinicalRecordForm({ ...clinicalRecordForm, observations: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Alergias
+                      <textarea
+                        value={clinicalRecordForm.allergies}
+                        onChange={(event) => setClinicalRecordForm({ ...clinicalRecordForm, allergies: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Condiciones crónicas
+                      <textarea
+                        value={clinicalRecordForm.chronicConditions}
+                        onChange={(event) => setClinicalRecordForm({ ...clinicalRecordForm, chronicConditions: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Medicación actual
+                      <textarea
+                        value={clinicalRecordForm.currentMedications}
+                        onChange={(event) => setClinicalRecordForm({ ...clinicalRecordForm, currentMedications: event.target.value })}
+                      />
+                    </label>
+
+                    <div className="form-actions">
+                      <button type="button" className="secondary-button" onClick={() => setIsClinicalRecordFormOpen(false)}>Cancelar</button>
+                      <button type="submit" className="primary-button" disabled={savingClinicalRecord}>
+                        {savingClinicalRecord ? "Guardando..." : "Guardar expediente"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {isFormOpen && (
               <div className="modal-backdrop">
