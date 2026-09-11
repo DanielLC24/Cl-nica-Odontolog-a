@@ -3378,24 +3378,6 @@ textarea:focus {
   animation: login-line-glow 2.8s ease-in-out infinite;
 }
 
-.login-mark-stethoscope {
-  fill: none;
-  stroke: #9bcf3a;
-  stroke-width: 7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 465;
-  stroke-dashoffset: 465;
-  animation: login-stethoscope-draw 1.4s ease-out forwards, login-stethoscope-breathe 3.6s ease-in-out 1.4s infinite;
-}
-
-.login-mark-node {
-  fill: #9bcf3a;
-  stroke: #ffffff;
-  stroke-width: 4;
-  animation: login-node-pulse 2.4s ease-in-out infinite;
-}
-
 .login-hero-title {
   display: grid;
   justify-items: center;
@@ -3436,34 +3418,6 @@ textarea:focus {
 
   50% {
     stroke: #38bdf8;
-  }
-}
-
-@keyframes login-stethoscope-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes login-stethoscope-breathe {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(3px);
-  }
-}
-
-@keyframes login-node-pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.12);
   }
 }
 
