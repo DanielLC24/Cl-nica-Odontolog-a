@@ -2989,3 +2989,347 @@ input.no-spinner {
   }
 }
 
+/* One Last Care visual refresh */
+:root {
+  --olc-ink: #102a43;
+  --olc-muted: #64748b;
+  --olc-navy: #102a43;
+  --olc-navy-soft: #173b57;
+  --olc-teal: #00a896;
+  --olc-teal-dark: #047b72;
+  --olc-aqua: #5eead4;
+  --olc-mint: #e6fbf6;
+  --olc-sky: #e8f5ff;
+  --olc-ivory: #fff8f0;
+  --olc-coral: #ff7a6b;
+  --olc-coral-soft: #fff0ed;
+  --olc-amber: #f6b73c;
+  --olc-line: #dbe7ee;
+  --olc-card: rgba(255, 255, 255, 0.9);
+  --olc-shadow: 0 18px 45px rgba(16, 42, 67, 0.11);
+}
+
+body {
+  color: var(--olc-ink);
+  background:
+    radial-gradient(circle at 14% 8%, rgba(94, 234, 212, 0.24), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(255, 122, 107, 0.14), transparent 26%),
+    linear-gradient(135deg, #f7fcfb 0%, #edf7fb 48%, var(--olc-ivory) 100%);
+}
+
+button {
+  background: var(--olc-teal-dark);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+input,
+select,
+textarea {
+  border-color: var(--olc-line) !important;
+  background: rgba(255, 255, 255, 0.94) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 3px solid rgba(0, 168, 150, 0.16);
+  border-color: var(--olc-teal) !important;
+}
+
+.login-screen {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(94, 234, 212, 0.36), transparent 28%),
+    radial-gradient(circle at 72% 78%, rgba(255, 122, 107, 0.22), transparent 25%),
+    linear-gradient(140deg, #f8fffd 0%, #eaf8ff 52%, var(--olc-ivory) 100%);
+}
+
+.login-card,
+.topbar,
+.metric,
+.panel,
+.patient-list-card,
+.patient-profile-card,
+.modal-card,
+.doctors-table-card,
+.inventory-section-card,
+.budget-card,
+.cash-cut-card {
+  border: 1px solid rgba(219, 231, 238, 0.92);
+  border-radius: 18px;
+  background: var(--olc-card);
+  box-shadow: var(--olc-shadow);
+  backdrop-filter: blur(12px);
+}
+
+.login-brand,
+.brand,
+.topbar h1,
+.section-heading h2,
+.section-heading h3,
+.metric strong,
+.profile-header h3 {
+  color: var(--olc-ink);
+}
+
+.login-brand span,
+.topbar p,
+.section-subtitle,
+.metric span,
+.billing-summary span,
+.profile-grid span,
+.demo-users,
+.demo-users p,
+.demo-users ul {
+  color: var(--olc-muted);
+}
+
+.tooth-logo svg {
+  filter: drop-shadow(0 7px 12px rgba(0, 168, 150, 0.22));
+}
+
+.tooth-logo-shape {
+  stroke: var(--olc-teal-dark);
+}
+
+.tooth-logo-highlight {
+  stroke: var(--olc-teal);
+}
+
+.login-button,
+.primary-button {
+  background: linear-gradient(135deg, var(--olc-teal-dark), var(--olc-teal) 64%, #38bdf8);
+  box-shadow: 0 12px 22px rgba(0, 168, 150, 0.22);
+}
+
+.secondary-button,
+.close-button {
+  background: #eef8f7;
+  color: var(--olc-teal-dark);
+  border: 1px solid #b8ebe3;
+}
+
+.sidebar {
+  background:
+    linear-gradient(180deg, rgba(16, 42, 67, 0.98) 0%, rgba(12, 58, 82, 0.98) 58%, rgba(4, 123, 114, 0.96) 100%);
+  box-shadow: 12px 0 30px rgba(16, 42, 67, 0.12);
+}
+
+.sidebar .brand strong {
+  color: #ffffff;
+}
+
+.nav-item {
+  color: #e6f7f6;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.nav-item.active,
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(94, 234, 212, 0.12);
+}
+
+.content {
+  padding: 30px;
+}
+
+.topbar {
+  padding: 18px 20px;
+}
+
+.topbar p {
+  color: var(--olc-teal-dark);
+  font-weight: 800;
+}
+
+.metric {
+  position: relative;
+  overflow: hidden;
+}
+
+.metric::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: linear-gradient(180deg, var(--olc-teal), var(--olc-aqua));
+}
+
+.metric-danger {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fffafa, #fff1f2);
+}
+
+.metric-danger strong {
+  color: #b91c1c;
+}
+
+.metric-warning {
+  border-color: #fed7aa;
+  background: linear-gradient(135deg, #fffaf3, #fff7ed);
+}
+
+.metric-warning strong {
+  color: #c2410c;
+}
+
+.dashboard-card,
+.inventory-section-card,
+.cash-cut-card,
+.patient-profile-card,
+.patient-list-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 253, 252, 0.92));
+}
+
+.dashboard-danger-card,
+.low-stock-alert,
+.inventory-summary-alert,
+.dashboard-inventory-alert {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fff7f7, #fff0ed);
+}
+
+.dashboard-appointment-row,
+.dashboard-next-row,
+.dashboard-money-grid div,
+.dashboard-notification-grid div,
+.cash-cut-metric,
+.inventory-summary-card,
+.history-appointment-row,
+.payment-history-row,
+.inventory-stock-info {
+  border: 1px solid rgba(219, 231, 238, 0.9);
+  background: rgba(248, 253, 252, 0.92);
+}
+
+.appointment,
+.appointment-week-day,
+.budget-card,
+.inventory-table-row,
+.table-row,
+.patient-row,
+.doctor-specialty-tag,
+.budget-status,
+.appointment-status-badge {
+  border-radius: 12px;
+}
+
+.appointment.arrived,
+.appointment-status-button.arrived,
+.appointment-status-badge.arrived,
+.history-status.history-llego {
+  border-color: #86efac;
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.appointment.waiting,
+.appointment-status-button.waiting,
+.appointment-status-badge.waiting,
+.history-status.history-en_espera {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.appointment.missed,
+.appointment-status-button.missed,
+.appointment-status-badge.missed,
+.history-status.history-falto {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #991b1b;
+}
+
+.profile-alerts {
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(135deg, #fff7ed, #fff0ed);
+  border: 1px solid #fed7aa;
+}
+
+.photo-history-upload-panel,
+.odontogram-diagram {
+  border-color: #b8ebe3;
+  background: linear-gradient(135deg, #f8fffd, #eaf8ff);
+}
+
+.photo-history-dropzone {
+  border-color: var(--olc-teal);
+  background: linear-gradient(135deg, #ffffff, var(--olc-mint));
+}
+
+.photo-tag.active,
+.billing-filter-button.active,
+.cash-cut-period-button.active,
+.appointment-view-button.active {
+  background: linear-gradient(135deg, var(--olc-teal-dark), var(--olc-teal));
+  border-color: var(--olc-teal-dark);
+  color: #ffffff;
+}
+
+.tooth.sano .tooth-enamel {
+  fill: #f0fdf4;
+  stroke: #16a34a;
+}
+
+.tooth.caries .tooth-enamel {
+  fill: #fff0ed;
+  stroke: var(--olc-coral);
+}
+
+.tooth.caries .tooth-status {
+  color: #b42318;
+  background: #ffe4df;
+}
+
+.tooth.endodoncia .tooth-enamel {
+  fill: #eef2ff;
+  stroke: #6366f1;
+}
+
+.tooth.endodoncia .tooth-status {
+  color: #3730a3;
+  background: #e0e7ff;
+}
+
+.tooth.extraccion .tooth-enamel {
+  fill: #e2e8f0;
+  stroke: #64748b;
+}
+
+.inventory-stock-badge.ok,
+.budget-status.status-pagado {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.inventory-stock-badge.low,
+.budget-status.status-pendiente {
+  background: #ffe4df;
+  color: #b42318;
+}
+
+.budget-status.status-parcial {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+@media (max-width: 900px) {
+  .content {
+    padding: 18px;
+  }
+
+  .metrics-grid,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
