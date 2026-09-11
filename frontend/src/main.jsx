@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Activity, CalendarDays, CreditCard, LayoutDashboard, Stethoscope, UserRound } from "lucide-react";
+import { Activity, CalendarDays, CreditCard, LayoutDashboard, Package, Stethoscope, UserRound } from "lucide-react";
 import "./styles.css";
 
 const toothNames = {
@@ -50,7 +50,8 @@ const navItems = [
   { key: "appointments", label: "Agenda", icon: CalendarDays },
   { key: "doctors", label: "Doctores", icon: Stethoscope },
   { key: "odontogram", label: "Odontograma", icon: Activity },
-  { key: "billing", label: "Pagos", icon: CreditCard }
+  { key: "billing", label: "Pagos", icon: CreditCard },
+  { key: "inventory", label: "Inventario", icon: Package }
 ];
 
 const temporaryCubicles = [
@@ -103,6 +104,21 @@ const emptyDoctorForm = {
   specialty: "",
   email: "",
   phone: ""
+};
+
+const emptySupplyForm = {
+  name: "",
+  stock: "",
+  minimumStock: "",
+  unit: "",
+  supplierId: ""
+};
+
+const emptySupplierForm = {
+  name: "",
+  phone: "",
+  email: "",
+  address: ""
 };
 
 const odontogramStatuses = ["SANO", "CARIES", "ENDODONCIA", "EXTRACCION"];
@@ -452,6 +468,32 @@ function App() {
   const [savingPatient, setSavingPatient] = useState(false);
   const [clinicalRecordForm, setClinicalRecordForm] = useState(emptyClinicalRecordForm);
   const [savingClinicalRecord, setSavingClinicalRecord] = useState(false);
+
+  const [supplies, setSupplies] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [loadingInventory, setLoadingInventory] = useState(false);
+  const [inventoryError, setInventoryError] = useState("");
+  const [inventorySuccess, setInventorySuccess] = useState("");
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [inventoryFormError, setInventoryFormError] = useState("");
+
+  const [isSupplyModalOpen, setIsSupplyModalOpen] = useState(false);
+  const [supplyModalMode, setSupplyModalMode] = useState("create");
+  const [editingSupplyId, setEditingSupplyId] = useState(null);
+  const [supplyForm, setSupplyForm] = useState(emptySupplyForm);
+  const [savingSupply, setSavingSupply] = useState(false);
+
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [stockSupply, setStockSupply] = useState(null);
+  const [stockValue, setStockValue] = useState("");
+  const [savingStock, setSavingStock] = useState(false);
+
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [supplierModalMode, setSupplierModalMode] = useState("create");
+  const [editingSupplierId, setEditingSupplierId] = useState(null);
+  const [supplierForm, setSupplierForm] = useState(emptySupplierForm);
+  const [savingSupplier, setSavingSupplier] = useState(false);
+
   const [, setClockTick] = useState(0);
   const availableAppointmentTimes = getAvailableAppointmentTimes(appointmentForm.date);
 
@@ -958,6 +1000,331 @@ function App() {
       setSelectedPatientId(filteredPatients[0]?.id || null);
     }
   }, [filteredPatients, selectedPatient]);
+
+  const fetchInventory = async () => {
+    setLoadingInventory(true);
+    setInventoryError("");
+
+    try {
+      const [suppliesResponse, suppliersResponse] = await Promise.all([
+        fetch("http://localhost:3000/api/inventory/supplies"),
+        fetch("http://localhost:3000/api/inventory/suppliers")
+      ]);
+
+      if (!suppliesResponse.ok || !suppliersResponse.ok) {
+        throw new Error("No se pudo cargar el inventario");
+      }
+
+      const [suppliesData, suppliersData] = await Promise.all([
+        suppliesResponse.json(),
+        suppliersResponse.json()
+      ]);
+
+      setSupplies(suppliesData);
+      setSuppliers(suppliersData);
+    } catch (error) {
+      console.error(error);
+      setSupplies([]);
+      setSuppliers([]);
+      setInventoryError("No se pudo cargar el inventario. Verifica que el backend esté disponible.");
+    } finally {
+      setLoadingInventory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && activeSection === "inventory") {
+      fetchInventory();
+    }
+  }, [isLoggedIn, activeSection]);
+
+  const showInventorySuccess = (message) => {
+    setInventorySuccess(message);
+    window.setTimeout(() => setInventorySuccess(""), 3500);
+  };
+
+  const readInventoryError = async (response, fallback) => {
+    const data = await response.json().catch(() => ({}));
+    return data.error || data.message || fallback;
+  };
+
+  const openSupplyModal = (supply = null) => {
+    setInventoryFormError("");
+
+    if (supply) {
+      setSupplyModalMode("edit");
+      setEditingSupplyId(supply.id);
+      setSupplyForm({
+        name: supply.name || "",
+        stock: String(supply.stock ?? ""),
+        minimumStock: String(supply.minimumStock ?? ""),
+        unit: supply.unit || "",
+        supplierId: supply.supplierId ? String(supply.supplierId) : ""
+      });
+    } else {
+      setSupplyModalMode("create");
+      setEditingSupplyId(null);
+      setSupplyForm(emptySupplyForm);
+    }
+
+    setIsSupplyModalOpen(true);
+  };
+
+  const closeSupplyModal = () => {
+    setIsSupplyModalOpen(false);
+    setEditingSupplyId(null);
+    setSupplyForm(emptySupplyForm);
+    setInventoryFormError("");
+  };
+
+  const handleSaveSupply = async (event) => {
+    event.preventDefault();
+    setInventoryFormError("");
+
+    const name = supplyForm.name.trim();
+    const unit = supplyForm.unit.trim();
+    const stock = Number(supplyForm.stock);
+    const minimumStock = Number(supplyForm.minimumStock);
+
+    if (!name) {
+      setInventoryFormError("El nombre del insumo es obligatorio.");
+      return;
+    }
+
+    if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) {
+      setInventoryFormError("El stock debe ser un número entero mayor o igual a 0.");
+      return;
+    }
+
+    if (!Number.isFinite(minimumStock) || minimumStock < 0 || !Number.isInteger(minimumStock)) {
+      setInventoryFormError("El stock mínimo debe ser un número entero mayor o igual a 0.");
+      return;
+    }
+
+    setSavingSupply(true);
+
+    try {
+      const url = supplyModalMode === "edit"
+        ? `http://localhost:3000/api/inventory/supplies/${editingSupplyId}`
+        : "http://localhost:3000/api/inventory/supplies";
+
+      const response = await fetch(url, {
+        method: supplyModalMode === "edit" ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          stock,
+          minimumStock,
+          unit: unit || null,
+          supplierId: supplyForm.supplierId ? Number(supplyForm.supplierId) : null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo guardar el insumo."));
+      }
+
+      await fetchInventory();
+      closeSupplyModal();
+      showInventorySuccess(supplyModalMode === "edit" ? "Insumo actualizado correctamente." : "Insumo registrado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo guardar el insumo.");
+    } finally {
+      setSavingSupply(false);
+    }
+  };
+
+  const openStockModal = (supply) => {
+    setStockSupply(supply);
+    setStockValue(String(supply.stock ?? 0));
+    setInventoryFormError("");
+    setIsStockModalOpen(true);
+  };
+
+  const closeStockModal = () => {
+    setIsStockModalOpen(false);
+    setStockSupply(null);
+    setStockValue("");
+    setInventoryFormError("");
+  };
+
+  const handleUpdateStock = async (event) => {
+    event.preventDefault();
+    setInventoryFormError("");
+
+    const stock = Number(stockValue);
+    if (!Number.isFinite(stock) || stock < 0 || !Number.isInteger(stock)) {
+      setInventoryFormError("El stock debe ser un número entero mayor o igual a 0.");
+      return;
+    }
+
+    setSavingStock(true);
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/supplies/${stockSupply.id}/update-stock`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stock })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo actualizar el stock."));
+      }
+
+      await fetchInventory();
+      closeStockModal();
+      showInventorySuccess("Stock actualizado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo actualizar el stock.");
+    } finally {
+      setSavingStock(false);
+    }
+  };
+
+  const handleDeactivateSupply = async (supply) => {
+    if (!window.confirm(`¿Desactivar el insumo "${supply.name}"?`)) {
+      return;
+    }
+
+    setInventoryError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/supplies/${supply.id}/deactivate`, {
+        method: "PATCH"
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo desactivar el insumo."));
+      }
+
+      await fetchInventory();
+      showInventorySuccess("Insumo desactivado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryError(error.message || "No se pudo desactivar el insumo.");
+    }
+  };
+
+  const openSupplierModal = (supplier = null) => {
+    setInventoryFormError("");
+
+    if (supplier) {
+      setSupplierModalMode("edit");
+      setEditingSupplierId(supplier.id);
+      setSupplierForm({
+        name: supplier.name || "",
+        phone: supplier.phone || "",
+        email: supplier.email || "",
+        address: supplier.address || ""
+      });
+    } else {
+      setSupplierModalMode("create");
+      setEditingSupplierId(null);
+      setSupplierForm(emptySupplierForm);
+    }
+
+    setIsSupplierModalOpen(true);
+  };
+
+  const closeSupplierModal = () => {
+    setIsSupplierModalOpen(false);
+    setEditingSupplierId(null);
+    setSupplierForm(emptySupplierForm);
+    setInventoryFormError("");
+  };
+
+  const handleSaveSupplier = async (event) => {
+    event.preventDefault();
+    setInventoryFormError("");
+
+    const name = supplierForm.name.trim();
+    if (!name) {
+      setInventoryFormError("El nombre del proveedor es obligatorio.");
+      return;
+    }
+
+    setSavingSupplier(true);
+
+    try {
+      const url = supplierModalMode === "edit"
+        ? `http://localhost:3000/api/inventory/suppliers/${editingSupplierId}`
+        : "http://localhost:3000/api/inventory/suppliers";
+
+      const response = await fetch(url, {
+        method: supplierModalMode === "edit" ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          phone: supplierForm.phone.trim() || null,
+          email: supplierForm.email.trim() || null,
+          address: supplierForm.address.trim() || null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo guardar el proveedor."));
+      }
+
+      await fetchInventory();
+      closeSupplierModal();
+      showInventorySuccess(supplierModalMode === "edit" ? "Proveedor actualizado correctamente." : "Proveedor registrado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo guardar el proveedor.");
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
+
+  const handleDeactivateSupplier = async (supplier) => {
+    const linkedSupplies = supplies.filter((supply) => String(supply.supplierId) === String(supplier.id));
+
+    const warning = linkedSupplies.length > 0
+      ? `Este proveedor está asociado a ${linkedSupplies.length} insumo(s). ¿Deseas desactivarlo de todas formas?`
+      : `¿Desactivar al proveedor "${supplier.name}"?`;
+
+    if (!window.confirm(warning)) {
+      return;
+    }
+
+    setInventoryError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/suppliers/${supplier.id}/deactivate`, {
+        method: "PATCH"
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo desactivar el proveedor."));
+      }
+
+      await fetchInventory();
+      showInventorySuccess("Proveedor desactivado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryError(error.message || "No se pudo desactivar el proveedor.");
+    }
+  };
+
+  const lowStockSupplies = supplies.filter(
+    (supply) => Number(supply.stock) <= Number(supply.minimumStock)
+  );
+
+  const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
+  const filteredInventorySupplies = supplies.filter((supply) => {
+    if (!normalizedInventorySearch) return true;
+
+    const supplierName = suppliers.find((supplier) => String(supplier.id) === String(supply.supplierId))?.name || "";
+    return `${supply.name || ""} ${supply.unit || ""} ${supplierName}`
+      .toLowerCase()
+      .includes(normalizedInventorySearch);
+  });
+
+  const supplierNameForSupply = (supply) => (
+    suppliers.find((supplier) => String(supplier.id) === String(supply.supplierId))?.name || "Sin proveedor"
+  );
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -2708,6 +3075,363 @@ function App() {
               </div>
             )}
           </section>
+        )}
+
+        {activeSection === "inventory" && (
+          <section id="inventory" className="panel inventory-panel">
+            <div className="section-heading inventory-heading">
+              <div>
+                <h2>Inventario</h2>
+                <p className="section-subtitle">Gestión de insumos, existencias y proveedores</p>
+              </div>
+
+              <div className="inventory-heading-actions">
+                <button type="button" className="secondary-button" onClick={() => openSupplierModal()}>
+                  + Nuevo proveedor
+                </button>
+                <button type="button" className="primary-button" onClick={() => openSupplyModal()}>
+                  + Nuevo insumo
+                </button>
+              </div>
+            </div>
+
+            {inventorySuccess && (
+              <div className="inventory-success-banner">
+                <span>{inventorySuccess}</span>
+                <button type="button" className="close-button" onClick={() => setInventorySuccess("")}>✕</button>
+              </div>
+            )}
+
+            {inventoryError && <p className="inventory-error-message">{inventoryError}</p>}
+
+            <div className="inventory-summary-grid">
+              <article className="inventory-summary-card">
+                <span>Insumos activos</span>
+                <strong>{supplies.length}</strong>
+              </article>
+              <article className={`inventory-summary-card ${lowStockSupplies.length > 0 ? "inventory-summary-alert" : ""}`}>
+                <span>Stock bajo</span>
+                <strong>{lowStockSupplies.length}</strong>
+              </article>
+              <article className="inventory-summary-card">
+                <span>Proveedores activos</span>
+                <strong>{suppliers.length}</strong>
+              </article>
+            </div>
+
+            {lowStockSupplies.length > 0 && (
+              <div className="low-stock-alert">
+                <div>
+                  <strong>⚠ Alerta de stock bajo</strong>
+                  <span>
+                    {lowStockSupplies.length === 1
+                      ? "Hay 1 insumo en el nivel mínimo o por debajo."
+                      : `Hay ${lowStockSupplies.length} insumos en el nivel mínimo o por debajo.`}
+                  </span>
+                </div>
+                <div className="low-stock-tags">
+                  {lowStockSupplies.map((supply) => (
+                    <span key={supply.id}>
+                      {supply.name}: {supply.stock} {supply.unit || "unidades"}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="inventory-section-card">
+              <div className="inventory-card-heading">
+                <div>
+                  <h3>Insumos</h3>
+                  <p>Control de existencias y niveles mínimos.</p>
+                </div>
+                <input
+                  type="search"
+                  value={inventorySearch}
+                  onChange={(event) => setInventorySearch(event.target.value)}
+                  placeholder="Buscar insumo o proveedor..."
+                  aria-label="Buscar insumo"
+                />
+              </div>
+
+              {loadingInventory ? (
+                <p className="inventory-empty">Cargando inventario...</p>
+              ) : filteredInventorySupplies.length === 0 ? (
+                <p className="inventory-empty">
+                  {supplies.length === 0 ? "No hay insumos registrados." : "No hay insumos que coincidan con la búsqueda."}
+                </p>
+              ) : (
+                <div className="inventory-table-wrap">
+                  <div className="inventory-table inventory-supplies-table">
+                    <div className="inventory-table-row inventory-table-head">
+                      <span>Insumo</span>
+                      <span>Stock</span>
+                      <span>Mínimo</span>
+                      <span>Unidad</span>
+                      <span>Proveedor</span>
+                      <span>Estado</span>
+                      <span>Acciones</span>
+                    </div>
+
+                    {filteredInventorySupplies.map((supply) => {
+                      const isLowStock = Number(supply.stock) <= Number(supply.minimumStock);
+
+                      return (
+                        <div key={supply.id} className={`inventory-table-row ${isLowStock ? "inventory-low-row" : ""}`}>
+                          <span className="inventory-name-cell">{supply.name}</span>
+                          <strong>{supply.stock}</strong>
+                          <span>{supply.minimumStock}</span>
+                          <span>{supply.unit || "—"}</span>
+                          <span>{supplierNameForSupply(supply)}</span>
+                          <span>
+                            <span className={`inventory-stock-badge ${isLowStock ? "low" : "ok"}`}>
+                              {isLowStock ? "Stock bajo" : "Disponible"}
+                            </span>
+                          </span>
+                          <div className="inventory-row-actions">
+                            <button type="button" className="inventory-action-button" onClick={() => openStockModal(supply)}>
+                              Stock
+                            </button>
+                            <button type="button" className="inventory-action-button" onClick={() => openSupplyModal(supply)}>
+                              Editar
+                            </button>
+                            <button type="button" className="inventory-danger-button" onClick={() => handleDeactivateSupply(supply)}>
+                              Desactivar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="inventory-section-card">
+              <div className="inventory-card-heading">
+                <div>
+                  <h3>Proveedores</h3>
+                  <p>Datos de contacto para reposición de materiales.</p>
+                </div>
+              </div>
+
+              {loadingInventory ? (
+                <p className="inventory-empty">Cargando proveedores...</p>
+              ) : suppliers.length === 0 ? (
+                <p className="inventory-empty">No hay proveedores registrados.</p>
+              ) : (
+                <div className="inventory-table-wrap">
+                  <div className="inventory-table inventory-suppliers-table">
+                    <div className="inventory-table-row inventory-table-head">
+                      <span>Proveedor</span>
+                      <span>Teléfono</span>
+                      <span>Correo</span>
+                      <span>Dirección</span>
+                      <span>Acciones</span>
+                    </div>
+
+                    {suppliers.map((supplier) => (
+                      <div key={supplier.id} className="inventory-table-row">
+                        <span className="inventory-name-cell">{supplier.name}</span>
+                        <span>{supplier.phone || "No registrado"}</span>
+                        <span className="inventory-contact-cell">{supplier.email || "No registrado"}</span>
+                        <span className="inventory-contact-cell">{supplier.address || "No registrada"}</span>
+                        <div className="inventory-row-actions">
+                          <button type="button" className="inventory-action-button" onClick={() => openSupplierModal(supplier)}>
+                            Editar
+                          </button>
+                          <button type="button" className="inventory-danger-button" onClick={() => handleDeactivateSupplier(supplier)}>
+                            Desactivar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {isSupplyModalOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card inventory-modal">
+              <div className="section-heading">
+                <h3>{supplyModalMode === "edit" ? "Editar insumo" : "Nuevo insumo"}</h3>
+                <button type="button" className="close-button" onClick={closeSupplyModal}>Cerrar</button>
+              </div>
+
+              <form className="inventory-form" onSubmit={handleSaveSupply}>
+                <label className="inventory-form-wide">
+                  Nombre del insumo *
+                  <input
+                    value={supplyForm.name}
+                    onChange={(event) => setSupplyForm({ ...supplyForm, name: event.target.value })}
+                    placeholder="Ej: Guantes de nitrilo"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Stock actual *
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={supplyForm.stock}
+                    onChange={(event) => setSupplyForm({ ...supplyForm, stock: event.target.value })}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Stock mínimo *
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={supplyForm.minimumStock}
+                    onChange={(event) => setSupplyForm({ ...supplyForm, minimumStock: event.target.value })}
+                    required
+                  />
+                </label>
+
+                <label>
+                  Unidad
+                  <input
+                    value={supplyForm.unit}
+                    onChange={(event) => setSupplyForm({ ...supplyForm, unit: event.target.value })}
+                    placeholder="cajas, unidades, cartuchos..."
+                  />
+                </label>
+
+                <label>
+                  Proveedor
+                  <select
+                    value={supplyForm.supplierId}
+                    onChange={(event) => setSupplyForm({ ...supplyForm, supplierId: event.target.value })}
+                  >
+                    <option value="">Sin proveedor</option>
+                    {suppliers.map((supplier) => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {inventoryFormError && <p className="inventory-form-error">{inventoryFormError}</p>}
+
+                <div className="form-actions">
+                  <button type="button" className="secondary-button" onClick={closeSupplyModal}>Cancelar</button>
+                  <button type="submit" className="primary-button" disabled={savingSupply}>
+                    {savingSupply ? "Guardando..." : supplyModalMode === "edit" ? "Guardar cambios" : "Registrar insumo"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isStockModalOpen && stockSupply && (
+          <div className="modal-backdrop">
+            <div className="modal-card inventory-stock-modal">
+              <div className="section-heading">
+                <div>
+                  <h3>Actualizar stock</h3>
+                  <p className="section-subtitle">{stockSupply.name}</p>
+                </div>
+                <button type="button" className="close-button" onClick={closeStockModal}>Cerrar</button>
+              </div>
+
+              <form className="inventory-stock-form" onSubmit={handleUpdateStock}>
+                <div className="inventory-stock-info">
+                  <span>Stock mínimo</span>
+                  <strong>{stockSupply.minimumStock} {stockSupply.unit || "unidades"}</strong>
+                </div>
+
+                <label>
+                  Nueva existencia
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={stockValue}
+                    onChange={(event) => setStockValue(event.target.value)}
+                    required
+                    autoFocus
+                  />
+                </label>
+
+                {inventoryFormError && <p className="inventory-form-error">{inventoryFormError}</p>}
+
+                <div className="form-actions">
+                  <button type="button" className="secondary-button" onClick={closeStockModal}>Cancelar</button>
+                  <button type="submit" className="primary-button" disabled={savingStock}>
+                    {savingStock ? "Actualizando..." : "Actualizar stock"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isSupplierModalOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card inventory-modal">
+              <div className="section-heading">
+                <h3>{supplierModalMode === "edit" ? "Editar proveedor" : "Nuevo proveedor"}</h3>
+                <button type="button" className="close-button" onClick={closeSupplierModal}>Cerrar</button>
+              </div>
+
+              <form className="inventory-form" onSubmit={handleSaveSupplier}>
+                <label className="inventory-form-wide">
+                  Nombre del proveedor *
+                  <input
+                    value={supplierForm.name}
+                    onChange={(event) => setSupplierForm({ ...supplierForm, name: event.target.value })}
+                    placeholder="Ej: Distribuidora Dental Puebla"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Teléfono
+                  <input
+                    value={supplierForm.phone}
+                    onChange={(event) => setSupplierForm({ ...supplierForm, phone: event.target.value })}
+                    placeholder="222 000 0000"
+                  />
+                </label>
+
+                <label>
+                  Correo
+                  <input
+                    type="email"
+                    value={supplierForm.email}
+                    onChange={(event) => setSupplierForm({ ...supplierForm, email: event.target.value })}
+                    placeholder="ventas@proveedor.com"
+                  />
+                </label>
+
+                <label className="inventory-form-wide">
+                  Dirección
+                  <input
+                    value={supplierForm.address}
+                    onChange={(event) => setSupplierForm({ ...supplierForm, address: event.target.value })}
+                    placeholder="Dirección del proveedor"
+                  />
+                </label>
+
+                {inventoryFormError && <p className="inventory-form-error">{inventoryFormError}</p>}
+
+                <div className="form-actions">
+                  <button type="button" className="secondary-button" onClick={closeSupplierModal}>Cancelar</button>
+                  <button type="submit" className="primary-button" disabled={savingSupplier}>
+                    {savingSupplier ? "Guardando..." : supplierModalMode === "edit" ? "Guardar cambios" : "Registrar proveedor"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
 
         {isBudgetFormOpen && (
