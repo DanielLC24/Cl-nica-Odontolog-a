@@ -122,6 +122,9 @@ const emptySupplierForm = {
 };
 
 const odontogramStatuses = ["SANO", "CARIES", "ENDODONCIA", "EXTRACCION"];
+const patientPhotosStorageKey = "clinica_patient_photos_v1";
+const maxPatientPhotoSize = 4 * 1024 * 1024;
+const patientPhotoTypes = ["Antes", "Después", "Radiografía"];
 
 function formatDoctorPhoneInput(value) {
   if (!value) return "";
@@ -253,6 +256,35 @@ function formatBudgetDate(value) {
   }).format(date);
 }
 
+function formatPhotoSize(bytes) {
+  if (!bytes) return "0 KB";
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function readPatientPhotoFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      resolve({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        dataUrl: reader.result,
+        uploadedAt: new Date().toISOString()
+      });
+    };
+
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function escapePrintHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -377,6 +409,23 @@ function getWeekDays(referenceDate) {
   });
 }
 
+function ToothLogo() {
+  return (
+    <span className="tooth-logo" aria-hidden="true">
+      <svg viewBox="0 0 64 64" focusable="false">
+        <path
+          className="tooth-logo-shape"
+          d="M20.6 10.7c4.5-2.6 8.2.6 11.4.6s6.9-3.2 11.4-.6c6.3 3.7 7.7 13.3 3.4 21.5-1.4 2.7-2.2 5.9-2.8 9.1-1.1 5.9-2.1 11.2-6.4 11.2-3.2 0-3.4-5.2-4.4-10.3-.3-1.8-.7-3.5-1.2-4.8-.5 1.3-.9 3-1.2 4.8-1 5.1-1.2 10.3-4.4 10.3-4.3 0-5.3-5.3-6.4-11.2-.6-3.2-1.4-6.4-2.8-9.1-4.3-8.2-2.9-17.8 3.4-21.5Z"
+        />
+        <path
+          className="tooth-logo-highlight"
+          d="M22.6 18.2c2.4-2.4 5.6-2.1 8.1-.8"
+        />
+      </svg>
+    </span>
+  );
+}
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userRole, setUserRole] = useState("Administrador");
@@ -468,6 +517,15 @@ function App() {
   const [savingPatient, setSavingPatient] = useState(false);
   const [clinicalRecordForm, setClinicalRecordForm] = useState(emptyClinicalRecordForm);
   const [savingClinicalRecord, setSavingClinicalRecord] = useState(false);
+  const [patientPhotos, setPatientPhotos] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(patientPhotosStorageKey)) || {};
+    } catch {
+      return {};
+    }
+  });
+  const [photoUploadError, setPhotoUploadError] = useState("");
+  const [selectedPhotoType, setSelectedPhotoType] = useState(patientPhotoTypes[0]);
 
   const [supplies, setSupplies] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -520,6 +578,17 @@ function App() {
     .filter((budget) => budgetFilter === "TODOS" || budget.status === budgetFilter)
     .slice()
     .sort((firstBudget, secondBudget) => Number(secondBudget.id) - Number(firstBudget.id));
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(patientPhotosStorageKey, JSON.stringify(patientPhotos));
+      setPhotoUploadError((current) => (
+        current === "No hay espacio suficiente en este navegador para guardar más fotos." ? "" : current
+      ));
+    } catch {
+      setPhotoUploadError("No hay espacio suficiente en este navegador para guardar más fotos.");
+    }
+  }, [patientPhotos]);
 
   const fetchAppointments = async () => {
     try {
@@ -585,6 +654,14 @@ function App() {
     fetchTreatments();
     fetchBudgets();
   }, []);
+
+  useEffect(() => {
+    if (isLoggedIn && activeSection === "dashboard") {
+      fetchPatients();
+      fetchInventory();
+      fetchCashCut("today");
+    }
+  }, [isLoggedIn, activeSection]);
 
   useEffect(() => {
     if (isLoggedIn && activeSection === "billing") {
@@ -995,11 +1072,90 @@ function App() {
       });
   }, [appointments, selectedPatientDetail]);
 
+  const todayAppointments = useMemo(
+    () => appointments
+      .filter((appointment) => appointment.date?.slice(0, 10) === getTodayDateKey())
+      .sort((firstAppointment, secondAppointment) => String(firstAppointment.time || "").localeCompare(String(secondAppointment.time || ""))),
+    [appointments]
+  );
+
+  const waitingTodayAppointments = todayAppointments.filter((appointment) => appointment.status === "EN_ESPERA");
+  const arrivedTodayAppointments = todayAppointments.filter((appointment) => appointment.status === "LLEGO");
+  const missedTodayAppointments = todayAppointments.filter((appointment) => appointment.status === "FALTO");
+  const patientsWithMedicalAlerts = patients.filter((patient) => patient.medicalAlerts?.length);
+  const pendingBalanceTotal = budgets.reduce((sum, budget) => sum + Number(budget.balance || 0), 0);
+  const pendingBudgetsCount = budgets.filter((budget) => Number(budget.balance || 0) > 0).length;
+  const nextPendingAppointments = appointments
+    .filter((appointment) => {
+      const date = appointment.date?.slice(0, 10);
+      return appointment.status === "EN_ESPERA" && (date > getTodayDateKey() || date === getTodayDateKey());
+    })
+    .sort((first, second) => `${first.date || ""} ${first.time || ""}`.localeCompare(`${second.date || ""} ${second.time || ""}`))
+    .slice(0, 4);
+
+  const selectedPatientPhotos = useMemo(() => {
+    if (!selectedPatientDetail?.id) {
+      return [];
+    }
+
+    return patientPhotos[String(selectedPatientDetail.id)] || [];
+  }, [patientPhotos, selectedPatientDetail]);
+
   useEffect(() => {
     if (selectedPatient && !filteredPatients.some((patient) => patient.id === selectedPatient.id)) {
       setSelectedPatientId(filteredPatients[0]?.id || null);
     }
   }, [filteredPatients, selectedPatient]);
+
+  const handlePatientPhotoUpload = async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+
+    if (!selectedPatientDetail?.id || files.length === 0) {
+      return;
+    }
+
+    const invalidFile = files.find((file) => !file.type.startsWith("image/"));
+    if (invalidFile) {
+      setPhotoUploadError("Solo puedes subir imágenes o radiografías en formato de imagen.");
+      return;
+    }
+
+    const oversizedFile = files.find((file) => file.size > maxPatientPhotoSize);
+    if (oversizedFile) {
+      setPhotoUploadError(`"${oversizedFile.name}" supera el límite de ${formatPhotoSize(maxPatientPhotoSize)}.`);
+      return;
+    }
+
+    try {
+      const uploadedPhotos = (await Promise.all(files.map(readPatientPhotoFile))).map((photo) => ({
+        ...photo,
+        category: selectedPhotoType
+      }));
+      const patientId = String(selectedPatientDetail.id);
+
+      setPatientPhotos((current) => ({
+        ...current,
+        [patientId]: [...(current[patientId] || []), ...uploadedPhotos]
+      }));
+      setPhotoUploadError("");
+    } catch (error) {
+      console.error(error);
+      setPhotoUploadError(error.message || "No se pudo subir la foto.");
+    }
+  };
+
+  const removePatientPhoto = (photoId) => {
+    if (!selectedPatientDetail?.id) {
+      return;
+    }
+
+    const patientId = String(selectedPatientDetail.id);
+    setPatientPhotos((current) => ({
+      ...current,
+      [patientId]: (current[patientId] || []).filter((photo) => photo.id !== photoId)
+    }));
+  };
 
   const fetchInventory = async () => {
     setLoadingInventory(true);
@@ -2045,7 +2201,7 @@ function App() {
       <div className="login-screen">
         <div className="login-card">
           <div className="login-brand">
-            <Stethoscope size={30} />
+            <ToothLogo />
             <div>
               <strong>Clínica Odontológica</strong>
               <span>Panel administrativo</span>
@@ -2097,7 +2253,7 @@ function App() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <Stethoscope size={28} />
+          <ToothLogo />
           <div>
             <strong>Clinica odontologica</strong>
             {/*<span>Clinica odontologica</span>*/}
@@ -2131,33 +2287,169 @@ function App() {
         {activeSection === "dashboard" && (
           <>
             <section className="metrics-grid" aria-label="Indicadores principales">
-              <Metric label="Citas de hoy" value="12" />
-              <Metric label="Pacientes activos" value="128" />
-              <Metric label="Pagos pendientes" value="$3,650" />
-              <Metric label="Alertas medicas" value="4" />
+              <Metric label="Citas de hoy" value={todayAppointments.length} />
+              <Metric label="En espera" value={waitingTodayAppointments.length} />
+              <Metric label="Stock bajo" value={lowStockSupplies.length} tone={lowStockSupplies.length ? "danger" : "normal"} />
+              <Metric label="Saldo pendiente" value={`$${pendingBalanceTotal.toLocaleString("es-MX")}`} tone={pendingBalanceTotal > 0 ? "warning" : "normal"} />
             </section>
 
-            <section className="panel">
-              <div className="section-heading">
-                <h2>Resumen operativo</h2>
+            <section className="dashboard-grid">
+              <div className="panel dashboard-card dashboard-card-wide">
+                <div className="section-heading dashboard-card-heading">
+                  <div>
+                    <h2>Citas de hoy</h2>
+                    <p className="section-subtitle">{formatAppointmentDate(getTodayDateKey())}</p>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setActiveSection("appointments")}>
+                    Ver agenda
+                  </button>
+                </div>
+
+                <div className="today-status-strip">
+                  <span className="today-status arrived">{arrivedTodayAppointments.length} llegaron</span>
+                  <span className="today-status waiting">{waitingTodayAppointments.length} en espera</span>
+                  <span className="today-status missed">{missedTodayAppointments.length} faltaron</span>
+                </div>
+
+                {loadingAppointments ? (
+                  <p className="dashboard-empty">Cargando citas...</p>
+                ) : todayAppointments.length === 0 ? (
+                  <p className="dashboard-empty">No hay citas programadas para hoy.</p>
+                ) : (
+                  <div className="dashboard-appointment-list">
+                    {todayAppointments.slice(0, 6).map((appointment) => (
+                      <button
+                        type="button"
+                        className={`dashboard-appointment-row ${statusClass(appointment.status)}`}
+                        key={appointment.id}
+                        onClick={() => {
+                          setActiveSection("appointments");
+                          setSelectedAppointmentDate(appointment.date?.slice(0, 10) || getTodayDateKey());
+                          setSelectedAppointmentId(appointment.id);
+                        }}
+                      >
+                        <strong>{formatAppointmentTime(appointment.time)}</strong>
+                        <span>{appointment.patientName}</span>
+                        <small>{appointment.doctor || "Sin doctor"} / {appointment.room || "Sin cubículo"}</small>
+                        <em>{formatAppointmentStatus(appointment.status)}</em>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="billing-summary">
-                <div>
-                  <span>Doctores activos</span>
-                  <strong>5</strong>
+
+              <div className="panel dashboard-card dashboard-danger-card">
+                <div className="section-heading dashboard-card-heading">
+                  <div>
+                    <h2>Alertas de inventario</h2>
+                    <p className="section-subtitle">Insumos en mínimo o por debajo.</p>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setActiveSection("inventory")}>
+                    Inventario
+                  </button>
                 </div>
-                <div>
-                  <span>Cubículos</span>
-                  <strong>3</strong>
+
+                {lowStockSupplies.length === 0 ? (
+                  <p className="dashboard-empty">No hay alertas de stock bajo.</p>
+                ) : (
+                  <div className="dashboard-alert-list">
+                    {lowStockSupplies.slice(0, 5).map((supply) => (
+                      <div className="dashboard-inventory-alert" key={supply.id}>
+                        <strong>{supply.name}</strong>
+                        <span>{supply.stock} {supply.unit || "unidades"} disponibles</span>
+                        <small>Mínimo: {supply.minimumStock}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="panel dashboard-card">
+                <div className="section-heading dashboard-card-heading">
+                  <div>
+                    <h2>Caja y pagos</h2>
+                    <p className="section-subtitle">Resumen financiero del día.</p>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setActiveSection("billing")}>
+                    Ver pagos
+                  </button>
                 </div>
-                <div>
-                  <span>Recordatorios</span>
-                  <strong>18</strong>
+
+                <div className="dashboard-money-grid">
+                  <div>
+                    <span>Corte de hoy</span>
+                    <strong>${cashCut.total.toLocaleString("es-MX")}</strong>
+                  </div>
+                  <div>
+                    <span>Pagos hoy</span>
+                    <strong>{cashCut.paymentCount}</strong>
+                  </div>
+                  <div>
+                    <span>Presupuestos pendientes</span>
+                    <strong>{pendingBudgetsCount}</strong>
+                  </div>
+                  <div>
+                    <span>Saldo por cobrar</span>
+                    <strong>${pendingBalanceTotal.toLocaleString("es-MX")}</strong>
+                  </div>
                 </div>
-                <div>
-                  <span>Corte de caja</span>
-                  <strong>$12,400</strong>
+              </div>
+
+              <div className="panel dashboard-card">
+                <div className="section-heading dashboard-card-heading">
+                  <div>
+                    <h2>Pacientes con alertas</h2>
+                    <p className="section-subtitle">Alergias o condiciones importantes.</p>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setActiveSection("patients")}>
+                    Pacientes
+                  </button>
                 </div>
+
+                {patientsWithMedicalAlerts.length === 0 ? (
+                  <p className="dashboard-empty">No hay alertas médicas registradas.</p>
+                ) : (
+                  <div className="dashboard-patient-alert-list">
+                    {patientsWithMedicalAlerts.slice(0, 4).map((patient) => (
+                      <button
+                        type="button"
+                        key={patient.id}
+                        onClick={() => {
+                          setSelectedPatientId(patient.id);
+                          setActiveSection("patients");
+                        }}
+                      >
+                        <strong>{patient.fullName}</strong>
+                        <span>{patient.medicalAlerts.join(", ")}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="panel dashboard-card dashboard-card-wide">
+                <div className="section-heading dashboard-card-heading">
+                  <div>
+                    <h2>Próximas citas pendientes</h2>
+                    <p className="section-subtitle">Seguimiento rápido de agenda.</p>
+                  </div>
+                </div>
+
+                {nextPendingAppointments.length === 0 ? (
+                  <p className="dashboard-empty">No hay citas pendientes próximas.</p>
+                ) : (
+                  <div className="dashboard-next-list">
+                    {nextPendingAppointments.map((appointment) => (
+                      <div className="dashboard-next-row" key={appointment.id}>
+                        <div>
+                          <strong>{appointment.patientName}</strong>
+                          <span>{appointment.doctor || "Sin doctor"} / {appointment.room || "Sin cubículo"}</span>
+                        </div>
+                        <time>{formatAppointmentDate(appointment.date?.slice(0, 10))} · {formatAppointmentTime(appointment.time)}</time>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
           </>
@@ -2262,6 +2554,74 @@ function App() {
                           <li>Sin alertas</li>
                         )}
                       </ul>
+                    </div>
+
+                    <div className="photo-history-card">
+                      <div className="clinical-card-title">
+                        <h4>Historia de Fotos</h4>
+                        <label
+                          className="primary-button small-button photo-upload-button"
+                          htmlFor={`patient-photo-upload-${selectedPatientDetail.id}`}
+                        >
+                          Subir foto
+                        </label>
+                      </div>
+                      <input
+                        id={`patient-photo-upload-${selectedPatientDetail.id}`}
+                        className="photo-file-input"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handlePatientPhotoUpload}
+                      />
+                      <div className="photo-history-upload-panel">
+                        <p className="photo-history-message">
+                          Se requiere poder subir las radiografías y las fotos de “antes y después”
+                          directamente desde la tablet o el celular al perfil del paciente.
+                        </p>
+                        <label
+                          className="photo-history-dropzone"
+                          htmlFor={`patient-photo-upload-${selectedPatientDetail.id}`}
+                        >
+                          <span className="photo-drop-icon">+</span>
+                          <span className="photo-drop-text">Agregar radiografía o foto</span>
+                        </label>
+                        <div className="photo-history-tags" aria-label="Tipo de imagen clínica">
+                          {patientPhotoTypes.map((photoType) => (
+                            <button
+                              type="button"
+                              className={`photo-tag ${selectedPhotoType === photoType ? "active" : ""}`}
+                              key={photoType}
+                              onClick={() => setSelectedPhotoType(photoType)}
+                            >
+                              {photoType}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="photo-type-helper">Las próximas imágenes se guardarán como: <strong>{selectedPhotoType}</strong>.</p>
+                        {photoUploadError ? <p className="photo-upload-error">{photoUploadError}</p> : null}
+                        {selectedPatientPhotos.length > 0 ? (
+                          <div className="photo-history-gallery">
+                            {selectedPatientPhotos.map((photo) => (
+                              <article className="photo-history-item" key={photo.id}>
+                                <img src={photo.dataUrl} alt={photo.name} />
+                                <div>
+                                  <span className="photo-category">{photo.category || "Radiografía"}</span>
+                                  <strong>{photo.name}</strong>
+                                  <span>
+                                    {formatPhotoSize(photo.size)} · {formatBudgetDate(photo.uploadedAt)}
+                                  </span>
+                                </div>
+                                <button type="button" onClick={() => removePatientPhoto(photo.id)}>
+                                  Eliminar
+                                </button>
+                              </article>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="photo-history-empty">Todavía no hay fotos o radiografías en este expediente.</p>
+                        )}
+                      </div>
                     </div>
 
                     <div className="patient-appointments-card">
@@ -3950,9 +4310,9 @@ function App() {
   );
 }
 
-function Metric({ label, value }) {
+function Metric({ label, value, tone = "normal" }) {
   return (
-    <article className="metric">
+    <article className={`metric metric-${tone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </article>
