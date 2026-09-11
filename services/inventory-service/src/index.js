@@ -175,9 +175,14 @@ app.get("/health", async (_req, res, next) => {
 
 // ========== SUPPLIES ENDPOINTS ==========
 
-app.get("/supplies", async (_req, res) => {
+app.get("/supplies", async (req, res) => {
   try {
-    const result = await query("SELECT * FROM supplies WHERE active = true ORDER BY id ASC");
+    const includeInactive = String(req.query.includeInactive || "").toLowerCase() === "true";
+    const result = await query(
+      includeInactive
+        ? "SELECT * FROM supplies ORDER BY active DESC, id ASC"
+        : "SELECT * FROM supplies WHERE active = true ORDER BY id ASC"
+    );
     res.json(result.rows.map(mapSupply));
   } catch (error) {
     console.error("Error fetching supplies:", error);
@@ -307,6 +312,22 @@ app.patch("/supplies/:id/deactivate", async (req, res) => {
   }
 });
 
+app.delete("/supplies/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query("DELETE FROM supplies WHERE id = $1 RETURNING *", [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Supply not found" });
+    }
+
+    res.json({ message: "Supply deleted", supply: mapSupply(result.rows[0]) });
+  } catch (error) {
+    console.error("Error deleting supply:", error);
+    res.status(500).json({ error: "Error deleting supply" });
+  }
+});
+
 app.patch("/supplies/:id/update-stock", async (req, res) => {
   try {
     const { id } = req.params;
@@ -334,9 +355,14 @@ app.patch("/supplies/:id/update-stock", async (req, res) => {
 
 // ========== SUPPLIERS ENDPOINTS ==========
 
-app.get("/suppliers", async (_req, res) => {
+app.get("/suppliers", async (req, res) => {
   try {
-    const result = await query("SELECT * FROM suppliers WHERE active = true ORDER BY id ASC");
+    const includeInactive = String(req.query.includeInactive || "").toLowerCase() === "true";
+    const result = await query(
+      includeInactive
+        ? "SELECT * FROM suppliers ORDER BY active DESC, id ASC"
+        : "SELECT * FROM suppliers WHERE active = true ORDER BY id ASC"
+    );
     res.json(result.rows.map(mapSupplier));
   } catch (error) {
     console.error("Error fetching suppliers:", error);
@@ -458,6 +484,28 @@ app.patch("/suppliers/:id/deactivate", async (req, res) => {
   } catch (error) {
     console.error("Error deactivating supplier:", error);
     res.status(500).json({ error: "Error deactivating supplier" });
+  }
+});
+
+app.delete("/suppliers/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await query("SELECT * FROM suppliers WHERE id = $1", [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Supplier not found" });
+    }
+
+    await query(
+      "UPDATE supplies SET supplier_id = NULL, updated_at = NOW() WHERE supplier_id = $1",
+      [id]
+    );
+
+    const result = await query("DELETE FROM suppliers WHERE id = $1 RETURNING *", [id]);
+    res.json({ message: "Supplier deleted", supplier: mapSupplier(result.rows[0]) });
+  } catch (error) {
+    console.error("Error deleting supplier:", error);
+    res.status(500).json({ error: "Error deleting supplier" });
   }
 });
 
