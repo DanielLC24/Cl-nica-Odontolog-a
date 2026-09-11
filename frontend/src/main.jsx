@@ -2099,8 +2099,8 @@ function App() {
         <div className="brand">
           <Stethoscope size={28} />
           <div>
-            <strong>ProyectoMoviles</strong>
-            <span>Clinica odontologica</span>
+            <strong>Clinica odontologica</strong>
+            {/*<span>Clinica odontologica</span>*/}
           </div>
         </div>
 
