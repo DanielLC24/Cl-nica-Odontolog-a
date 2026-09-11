@@ -435,11 +435,6 @@ function LoginBrandIllustration() {
       <svg className="login-hero-mark" viewBox="0 0 190 142" role="img" aria-labelledby="login-logo-title">
         <title id="login-logo-title">One Last Care Clínica Odontológica</title>
         <path
-          className="login-mark-stethoscope"
-          d="M50 66c0 24 18.8 39 45 39s45-15 45-39M50 66c-17.8 3.8-28 15.2-28 30.2 0 18.8 15.2 32.3 34.2 32.3 13.4 0 24.2-6.8 29.8-17.3M140 66c17.8 3.8 28 15.2 28 30.2 0 14.4-8.8 25.4-22.8 30"
-        />
-        <circle className="login-mark-node" cx="146" cy="126" r="6.8" />
-        <path
           className="login-mark-tooth"
           d="M72.8 11.6c8.6-5.5 15.8 1.3 22.2 1.3s13.6-6.8 22.2-1.3c12.6 8 14.5 29.1 6 46-3 5.8-4.6 12.7-5.8 19.9-2.4 13-4.9 27.5-13.9 27.5-6.5 0-7.4-13.1-8.5-23.6-1.1 10.5-2 23.6-8.5 23.6-9 0-11.5-14.5-13.9-27.5-1.2-7.2-2.8-14.1-5.8-19.9-8.5-16.9-6.6-38 6-46Z"
         />
