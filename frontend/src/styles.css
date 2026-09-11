@@ -1378,3 +1378,281 @@ input {
   display: flex;
   align-items: center;
 }
+
+.budgets-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.budget-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.budget-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #111827;
+}
+
+.budget-status {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.budget-status.status-pendiente {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.budget-status.status-parcial {
+  background: #bfdbfe;
+  color: #1e40af;
+}
+
+.budget-status.status-pagado {
+  background: #bbf7d0;
+  color: #166534;
+}
+
+.budget-details {
+  display: grid;
+  gap: 8px;
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-row span:first-child {
+  color: #667085;
+  font-size: 0.9rem;
+}
+
+.detail-row strong {
+  font-weight: 600;
+}
+
+.balance-pending {
+  color: #ca8a04;
+}
+
+.balance-paid {
+  color: #16a34a;
+}
+
+.budget-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.budget-form,
+.payment-form {
+  display: grid;
+  gap: 16px;
+}
+
+.treatments-checkbox-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #333;
+  font-weight: normal;
+  background: transparent;
+  padding: 8px;
+}
+
+.checkbox-label input[type="checkbox"] {
+  min-height: 18px;
+  min-width: 18px;
+  height: 18px;
+  width: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.budget-total-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 12px;
+  color: #166534;
+  font-weight: 600;
+}
+
+.payment-info {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-row span {
+  color: #667085;
+  font-size: 0.9rem;
+}
+
+.info-row strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.form-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 0.9rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.add-treatment-modal {
+  width: 90%;
+  max-width: 500px;
+}
+
+.add-treatment-form {
+  display: grid;
+  gap: 16px;
+}
+
+input.no-spinner::-webkit-outer-spin-button,
+input.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input.no-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.treatment-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.treatment-actions button {
+  flex: 1;
+}
+
+.manage-treatments-modal {
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.treatments-management-list {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.treatment-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  gap: 12px;
+}
+
+.treatment-info {
+  flex: 1;
+}
+
+.treatment-name {
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.treatment-price {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.danger-button {
+  background: #dc2626;
+  min-width: 100px;
+  white-space: nowrap;
+}
+
+.danger-button:hover {
+  background: #b91c1c;
+}
+
+.empty-message {
+  text-align: center;
+  color: #9ca3af;
+  padding: 32px 16px;
+  font-size: 0.95rem;
+}
+
+.delete-confirmation {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.delete-confirmation p {
+  color: #991b1b;
+  margin: 0 0 16px 0;
+  font-weight: 600;
+}

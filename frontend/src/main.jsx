@@ -348,6 +348,26 @@ function App() {
   const [loadingOdontogram, setLoadingOdontogram] = useState(false);
   const [savingOdontogramTooth, setSavingOdontogramTooth] = useState(false);
   const [odontogramError, setOdontogramError] = useState("");
+  const [treatments, setTreatments] = useState([]);
+  const [loadingTreatments, setLoadingTreatments] = useState(false);
+  const [budgets, setBudgets] = useState([]);
+  const [loadingBudgets, setLoadingBudgets] = useState(false);
+  const [budgetsError, setBudgetsError] = useState("");
+  const [isBudgetFormOpen, setIsBudgetFormOpen] = useState(false);
+  const [budgetForm, setBudgetForm] = useState({ patientId: "", treatments: [] });
+  const [budgetFormError, setBudgetFormError] = useState("");
+  const [savingBudget, setSavingBudget] = useState(false);
+  const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ amount: "" });
+  const [paymentFormError, setPaymentFormError] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
+  const [selectedBudgetId, setSelectedBudgetId] = useState(null);
+  const [isAddTreatmentModalOpen, setIsAddTreatmentModalOpen] = useState(false);
+  const [addTreatmentForm, setAddTreatmentForm] = useState({ name: "", price: "" });
+  const [addTreatmentFormError, setAddTreatmentFormError] = useState("");
+  const [savingAddTreatment, setSavingAddTreatment] = useState(false);
+  const [isManageTreatmentsModalOpen, setIsManageTreatmentsModalOpen] = useState(false);
+  const [treatmentToDelete, setTreatmentToDelete] = useState(null);
   const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
   const [appointmentFormMode, setAppointmentFormMode] = useState("create");
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);
@@ -394,8 +414,47 @@ function App() {
     }
   };
 
+  const fetchTreatments = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/api/billing/treatments");
+      if (!response.ok) {
+        throw new Error("No se pudieron cargar los tratamientos");
+      }
+      const data = await response.json();
+      setTreatments(data);
+    } catch (error) {
+      console.error(error);
+      setTreatments([]);
+    } finally {
+      setLoadingTreatments(false);
+    }
+  };
+
+  const fetchBudgets = async () => {
+    try {
+      const response = await fetch("http://localhost:3000/api/billing/budgets");
+      if (!response.ok) {
+        throw new Error("No se pudieron cargar los presupuestos");
+      }
+      const data = await response.json();
+      setBudgets(data);
+      setBudgetsError("");
+    } catch (error) {
+      console.error(error);
+      setBudgets([]);
+      setBudgetsError("No se pudieron cargar los presupuestos");
+    } finally {
+      setLoadingBudgets(false);
+    }
+  };
+
   useEffect(() => {
     fetchAppointments();
+  }, []);
+
+  useEffect(() => {
+    fetchTreatments();
+    fetchBudgets();
   }, []);
 
   useEffect(() => {
@@ -950,6 +1009,145 @@ function App() {
       setAppointmentFormError(error.message || "No se pudo guardar la cita.");
     } finally {
       setSavingAppointment(false);
+    }
+  };
+
+  const handleCreateBudget = async (event) => {
+    event.preventDefault();
+    setSavingBudget(true);
+    setBudgetFormError("");
+
+    if (!budgetForm.patientId || budgetForm.treatments.length === 0) {
+      setBudgetFormError("Debes seleccionar un paciente y al menos un tratamiento");
+      setSavingBudget(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:3000/api/billing/budgets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: Number(budgetForm.patientId),
+          treatments: budgetForm.treatments.map(Number)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo crear el presupuesto");
+      }
+
+      await fetchBudgets();
+      setIsBudgetFormOpen(false);
+      setBudgetForm({ patientId: "", treatments: [] });
+    } catch (error) {
+      console.error(error);
+      setBudgetFormError(error.message || "No se pudo crear el presupuesto");
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
+  const handleAddTreatment = async (event) => {
+    event.preventDefault();
+    setSavingAddTreatment(true);
+    setAddTreatmentFormError("");
+
+    const name = addTreatmentForm.name.trim();
+    const price = Number(addTreatmentForm.price);
+
+    if (!name) {
+      setAddTreatmentFormError("El nombre es requerido");
+      setSavingAddTreatment(false);
+      return;
+    }
+
+    if (Number.isNaN(price) || price <= 0) {
+      setAddTreatmentFormError("El precio es requerido y debe ser mayor a 0");
+      setSavingAddTreatment(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("http://localhost:3000/api/billing/treatments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, price })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo crear el tratamiento");
+      }
+
+      await fetchTreatments();
+      setIsAddTreatmentModalOpen(false);
+      setAddTreatmentForm({ name: "", price: "" });
+    } catch (error) {
+      console.error(error);
+      setAddTreatmentFormError(error.message || "No se pudo crear el tratamiento");
+    } finally {
+      setSavingAddTreatment(false);
+    }
+  };
+
+  const handleDeleteTreatment = async () => {
+    if (!treatmentToDelete) return;
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/billing/treatments/${treatmentToDelete}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo eliminar el tratamiento");
+      }
+
+      await fetchTreatments();
+      setTreatmentToDelete(null);
+    } catch (error) {
+      console.error(error);
+      alert(error.message || "No se pudo eliminar el tratamiento");
+    }
+  };
+
+  const handleCreatePayment = async (event) => {
+    event.preventDefault();
+    setSavingPayment(true);
+    setPaymentFormError("");
+
+    if (!paymentForm.amount || Number(paymentForm.amount) <= 0) {
+      setPaymentFormError("El monto debe ser mayor a 0");
+      setSavingPayment(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/billing/budgets/${selectedBudgetId}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(paymentForm.amount)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo registrar el pago");
+      }
+
+      await fetchBudgets();
+      setIsPaymentFormOpen(false);
+      setPaymentForm({ amount: "" });
+      setSelectedBudgetId(null);
+    } catch (error) {
+      console.error(error);
+      setPaymentFormError(error.message || "No se pudo registrar el pago");
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -1974,27 +2172,342 @@ function App() {
           <section id="billing" className="panel">
             <div className="section-heading">
               <h2>Presupuesto y pagos</h2>
-              <button type="button" className="primary-button">Generar presupuesto</button>
+              <button type="button" className="primary-button" onClick={() => {
+                fetchPatients();
+                fetchTreatments();
+                setIsBudgetFormOpen(true);
+              }}>
+                Generar presupuesto
+              </button>
             </div>
-            <div className="billing-summary">
-              <div>
-                <span>Tratamiento</span>
-                <strong>Endodoncia + limpieza</strong>
+
+            {budgetsError && <p className="error-message">{budgetsError}</p>}
+
+            {loadingBudgets ? (
+              <p>Cargando presupuestos...</p>
+            ) : budgets.length === 0 ? (
+              <p>No hay presupuestos registrados</p>
+            ) : (
+              <div className="budgets-list">
+                {budgets.map((budget) => {
+                  const patientName = patients.find((p) => p.id === budget.patientId)?.fullName || `Paciente #${budget.patientId}`;
+                  const canPayment = budget.balance > 0 && budget.status !== "PAGADO";
+
+                  return (
+                    <div key={budget.id} className="budget-card">
+                      <div className="budget-header">
+                        <h3>{patientName}</h3>
+                        <span className={`budget-status status-${budget.status.toLowerCase()}`}>
+                          {budget.status}
+                        </span>
+                      </div>
+
+                      <div className="budget-details">
+                        <div className="detail-row">
+                          <span>Tratamientos:</span>
+                          <span>
+                            {budget.treatments.map((t) => t.name).join(", ")}
+                          </span>
+                        </div>
+                        <div className="detail-row">
+                          <span>Total:</span>
+                          <strong>${budget.total.toLocaleString("es-MX")}</strong>
+                        </div>
+                        <div className="detail-row">
+                          <span>Pagado:</span>
+                          <strong>${budget.paid.toLocaleString("es-MX")}</strong>
+                        </div>
+                        <div className="detail-row">
+                          <span>Saldo:</span>
+                          <strong className={budget.balance > 0 ? "balance-pending" : "balance-paid"}>
+                            ${budget.balance.toLocaleString("es-MX")}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {canPayment && (
+                        <div className="budget-actions">
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => {
+                              setSelectedBudgetId(budget.id);
+                              setPaymentForm({ amount: "" });
+                              setPaymentFormError("");
+                              setIsPaymentFormOpen(true);
+                            }}
+                          >
+                            Registrar pago
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <div>
-                <span>Total</span>
-                <strong>$3,800</strong>
-              </div>
-              <div>
-                <span>Pagado</span>
-                <strong>$1,000</strong>
-              </div>
-              <div>
-                <span>Saldo</span>
-                <strong>$2,800</strong>
-              </div>
-            </div>
+            )}
           </section>
+        )}
+
+        {isBudgetFormOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card budget-modal">
+              <div className="section-heading">
+                <h3>Generar presupuesto</h3>
+                <button type="button" className="close-button" onClick={() => setIsBudgetFormOpen(false)}>
+                  Cerrar
+                </button>
+              </div>
+
+              <form className="budget-form" onSubmit={handleCreateBudget}>
+                <label>
+                  Paciente
+                  <select
+                    value={budgetForm.patientId}
+                    onChange={(event) => setBudgetForm({ ...budgetForm, patientId: event.target.value })}
+                    required
+                  >
+                    <option value="">Selecciona un paciente</option>
+                    {patients.map((patient) => (
+                      <option value={patient.id} key={patient.id}>{patient.fullName}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Tratamientos (selecciona uno o varios)
+                  <div className="treatment-actions">
+                    <button 
+                      type="button" 
+                      className="secondary-button" 
+                      onClick={() => setIsAddTreatmentModalOpen(true)}
+                    >
+                      + Agregar tratamiento
+                    </button>
+                    <button 
+                      type="button" 
+                      className="secondary-button" 
+                      onClick={() => setIsManageTreatmentsModalOpen(true)}
+                    >
+                      Administrar tratamientos
+                    </button>
+                  </div>
+                  <div className="treatments-checkbox-group">
+                    {treatments.map((treatment) => (
+                      <label key={treatment.id} className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={budgetForm.treatments.includes(String(treatment.id))}
+                          onChange={(event) => {
+                            if (event.target.checked) {
+                              setBudgetForm({
+                                ...budgetForm,
+                                treatments: [...budgetForm.treatments, String(treatment.id)]
+                              });
+                            } else {
+                              setBudgetForm({
+                                ...budgetForm,
+                                treatments: budgetForm.treatments.filter((id) => id !== String(treatment.id))
+                              });
+                            }
+                          }}
+                        />
+                        {treatment.name} - ${treatment.price.toLocaleString("es-MX")}
+                      </label>
+                    ))}
+                  </div>
+                </label>
+
+                <div className="budget-total-preview">
+                  <span>Total:</span>
+                  <strong>
+                    ${budgetForm.treatments.reduce((sum, treatmentId) => {
+                      const treatment = treatments.find((t) => String(t.id) === treatmentId);
+                      return sum + (treatment?.price || 0);
+                    }, 0).toLocaleString("es-MX")}
+                  </strong>
+                </div>
+
+                {budgetFormError && <p className="form-error">{budgetFormError}</p>}
+
+                <div className="form-actions">
+                  <button type="button" className="secondary-button" onClick={() => setIsBudgetFormOpen(false)}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="primary-button" disabled={savingBudget}>
+                    {savingBudget ? "Guardando..." : "Crear presupuesto"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isAddTreatmentModalOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card add-treatment-modal">
+              <div className="section-heading">
+                <h3>Agregar tratamiento</h3>
+                <button type="button" className="close-button" onClick={() => setIsAddTreatmentModalOpen(false)}>
+                  Cerrar
+                </button>
+              </div>
+
+              <form className="add-treatment-form" onSubmit={handleAddTreatment}>
+                <label>
+                  Nombre
+                  <input
+                    type="text"
+                    value={addTreatmentForm.name}
+                    onChange={(event) => setAddTreatmentForm({ ...addTreatmentForm, name: event.target.value })}
+                    placeholder="Ej: Blanqueamiento"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Precio
+                  <input
+                    type="number"
+                    className="no-spinner"
+                    value={addTreatmentForm.price}
+                    onChange={(event) => setAddTreatmentForm({ ...addTreatmentForm, price: event.target.value })}
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                    required
+                  />
+                </label>
+
+                {addTreatmentFormError && <p className="form-error">{addTreatmentFormError}</p>}
+
+                <div className="form-actions">
+                  <button type="button" className="secondary-button" onClick={() => setIsAddTreatmentModalOpen(false)}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="primary-button" disabled={savingAddTreatment}>
+                    {savingAddTreatment ? "Guardando..." : "Agregar tratamiento"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isManageTreatmentsModalOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card manage-treatments-modal">
+              <div className="section-heading">
+                <h3>Administrar tratamientos</h3>
+                <button type="button" className="close-button" onClick={() => {
+                  setIsManageTreatmentsModalOpen(false);
+                  setTreatmentToDelete(null);
+                }}>
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="treatments-management-list">
+                {treatments.length === 0 ? (
+                  <p className="empty-message">No hay tratamientos registrados</p>
+                ) : (
+                  treatments.map((treatment) => (
+                    <div key={treatment.id} className="treatment-item">
+                      <div className="treatment-info">
+                        <div className="treatment-name">{treatment.name}</div>
+                        <div className="treatment-price">${treatment.price.toLocaleString("es-MX")}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => setTreatmentToDelete(treatment.id)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {treatmentToDelete && (
+                <div className="delete-confirmation">
+                  <p>¿Estás seguro de que deseas eliminar este tratamiento?</p>
+                  <div className="form-actions">
+                    <button 
+                      type="button" 
+                      className="secondary-button"
+                      onClick={() => setTreatmentToDelete(null)}
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="button" 
+                      className="danger-button"
+                      onClick={handleDeleteTreatment}
+                    >
+                      Confirmar eliminación
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isPaymentFormOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card payment-modal">
+              <div className="section-heading">
+                <h3>Registrar pago</h3>
+                <button type="button" className="close-button" onClick={() => setIsPaymentFormOpen(false)}>
+                  Cerrar
+                </button>
+              </div>
+
+              {selectedBudgetId && (
+                <>
+                  {(() => {
+                    const budget = budgets.find((b) => b.id === selectedBudgetId);
+                    return budget ? (
+                      <div className="payment-info">
+                        <div className="info-row">
+                          <span>Saldo pendiente:</span>
+                          <strong>${budget.balance.toLocaleString("es-MX")}</strong>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  <form className="payment-form" onSubmit={handleCreatePayment}>
+                    <label>
+                      Monto a pagar
+                      <input
+                        type="number"
+                        className="no-spinner"
+                        step="0.01"
+                        min="0"
+                        value={paymentForm.amount}
+                        onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })}
+                        required
+                        placeholder="0.00"
+                      />
+                    </label>
+
+                    {paymentFormError && <p className="form-error">{paymentFormError}</p>}
+
+                    <div className="form-actions">
+                      <button type="button" className="secondary-button" onClick={() => setIsPaymentFormOpen(false)}>
+                        Cancelar
+                      </button>
+                      <button type="submit" className="primary-button" disabled={savingPayment}>
+                        {savingPayment ? "Guardando..." : "Registrar pago"}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </div>
+          </div>
         )}
 
         {isAppointmentFormOpen && (
