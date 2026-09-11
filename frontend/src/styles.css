@@ -2948,6 +2948,115 @@ input.no-spinner {
   color: #111827;
 }
 
+
+.inventory-inactive-card {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.inventory-inactive-card .inventory-table-head {
+  color: #7b8798;
+  background: #e8edf3;
+}
+
+.inventory-inactive-row {
+  background: #eef2f7;
+  color: #64748b;
+}
+
+.inventory-inactive-row:hover {
+  background: #e6ebf1;
+}
+
+.inventory-inactive-row .inventory-name-cell {
+  color: #64748b;
+}
+
+.inventory-inactive-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 27px;
+  padding: 3px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.inventory-activate-button,
+.inventory-warning-button,
+.inventory-delete-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.inventory-activate-button {
+  color: #ffffff;
+  background: #0f766e;
+  border: 1px solid #0f766e;
+}
+
+.inventory-warning-button {
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+}
+
+.inventory-delete-button {
+  color: #ffffff;
+  background: #b42318;
+  border: 1px solid #b42318;
+}
+
+.inventory-activate-button:disabled,
+.inventory-warning-button:disabled,
+.inventory-delete-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.inventory-modal-danger-zone {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 6px;
+  padding: 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fffafa;
+}
+
+.inventory-modal-danger-zone > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.inventory-modal-danger-zone strong {
+  color: #7f1d1d;
+}
+
+.inventory-modal-danger-zone span {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.inventory-modal-danger-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 900px) {
   .inventory-summary-grid {
     grid-template-columns: 1fr;
@@ -3432,3 +3541,14 @@ textarea:focus {
   }
 }
 
+@media (max-width: 620px) {
+  .inventory-modal-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inventory-modal-danger-actions,
+  .inventory-modal-danger-actions button {
+    width: 100%;
+  }
+}

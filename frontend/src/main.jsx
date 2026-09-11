@@ -594,6 +594,7 @@ function App() {
   const [inventoryError, setInventoryError] = useState("");
   const [inventorySuccess, setInventorySuccess] = useState("");
   const [inventorySearch, setInventorySearch] = useState("");
+  const [supplierSearch, setSupplierSearch] = useState("");
   const [inventoryFormError, setInventoryFormError] = useState("");
 
   const [isSupplyModalOpen, setIsSupplyModalOpen] = useState(false);
@@ -1225,8 +1226,8 @@ function App() {
 
     try {
       const [suppliesResponse, suppliersResponse] = await Promise.all([
-        fetch("http://localhost:3000/api/inventory/supplies"),
-        fetch("http://localhost:3000/api/inventory/suppliers")
+        fetch("http://localhost:3000/api/inventory/supplies?includeInactive=true"),
+        fetch("http://localhost:3000/api/inventory/suppliers?includeInactive=true")
       ]);
 
       if (!suppliesResponse.ok || !suppliersResponse.ok) {
@@ -1402,11 +1403,12 @@ function App() {
   };
 
   const handleDeactivateSupply = async (supply) => {
-    if (!window.confirm(`¿Desactivar el insumo "${supply.name}"?`)) {
+    if (!window.confirm(`¿Desactivar el insumo "${supply.name}"? Podrás volver a activarlo después.`)) {
       return;
     }
 
-    setInventoryError("");
+    setSavingSupply(true);
+    setInventoryFormError("");
 
     try {
       const response = await fetch(`http://localhost:3000/api/inventory/supplies/${supply.id}/deactivate`, {
@@ -1418,10 +1420,71 @@ function App() {
       }
 
       await fetchInventory();
+      closeSupplyModal();
       showInventorySuccess("Insumo desactivado correctamente.");
     } catch (error) {
       console.error(error);
-      setInventoryError(error.message || "No se pudo desactivar el insumo.");
+      setInventoryFormError(error.message || "No se pudo desactivar el insumo.");
+    } finally {
+      setSavingSupply(false);
+    }
+  };
+
+  const handleActivateSupply = async (supply) => {
+    if (!window.confirm(`¿Volver a activar el insumo "${supply.name}"?`)) {
+      return;
+    }
+
+    setSavingSupply(true);
+    setInventoryFormError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/supplies/${supply.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: true })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo activar el insumo."));
+      }
+
+      await fetchInventory();
+      closeSupplyModal();
+      showInventorySuccess("Insumo activado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo activar el insumo.");
+    } finally {
+      setSavingSupply(false);
+    }
+  };
+
+  const handleDeleteSupply = async (supply) => {
+    if (!window.confirm(`¿Eliminar permanentemente el insumo "${supply.name}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    setSavingSupply(true);
+    setInventoryFormError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/supplies/${supply.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo eliminar el insumo."));
+      }
+
+      await fetchInventory();
+      closeSupplyModal();
+      showInventorySuccess("Insumo eliminado permanentemente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo eliminar el insumo.");
+    } finally {
+      setSavingSupply(false);
     }
   };
 
@@ -1433,7 +1496,7 @@ function App() {
       setEditingSupplierId(supplier.id);
       setSupplierForm({
         name: supplier.name || "",
-        phone: supplier.phone || "",
+        phone: formatDoctorPhoneInput(supplier.phone || ""),
         email: supplier.email || "",
         address: supplier.address || ""
       });
@@ -1458,8 +1521,15 @@ function App() {
     setInventoryFormError("");
 
     const name = supplierForm.name.trim();
+    const cleanPhone = String(supplierForm.phone || "").replace(/\D/g, "").slice(0, 10);
+
     if (!name) {
       setInventoryFormError("El nombre del proveedor es obligatorio.");
+      return;
+    }
+
+    if (cleanPhone && cleanPhone.length !== 10) {
+      setInventoryFormError("El teléfono debe tener exactamente 10 dígitos.");
       return;
     }
 
@@ -1475,7 +1545,7 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          phone: supplierForm.phone.trim() || null,
+          phone: cleanPhone || null,
           email: supplierForm.email.trim() || null,
           address: supplierForm.address.trim() || null
         })
@@ -1497,17 +1567,20 @@ function App() {
   };
 
   const handleDeactivateSupplier = async (supplier) => {
-    const linkedSupplies = supplies.filter((supply) => String(supply.supplierId) === String(supplier.id));
+    const linkedSupplies = supplies.filter(
+      (supply) => supply.active !== false && String(supply.supplierId) === String(supplier.id)
+    );
 
     const warning = linkedSupplies.length > 0
-      ? `Este proveedor está asociado a ${linkedSupplies.length} insumo(s). ¿Deseas desactivarlo de todas formas?`
-      : `¿Desactivar al proveedor "${supplier.name}"?`;
+      ? `Este proveedor está asociado a ${linkedSupplies.length} insumo(s) activo(s). ¿Deseas desactivarlo de todas formas?`
+      : `¿Desactivar al proveedor "${supplier.name}"? Podrás volver a activarlo después.`;
 
     if (!window.confirm(warning)) {
       return;
     }
 
-    setInventoryError("");
+    setSavingSupplier(true);
+    setInventoryFormError("");
 
     try {
       const response = await fetch(`http://localhost:3000/api/inventory/suppliers/${supplier.id}/deactivate`, {
@@ -1519,30 +1592,116 @@ function App() {
       }
 
       await fetchInventory();
+      closeSupplierModal();
       showInventorySuccess("Proveedor desactivado correctamente.");
     } catch (error) {
       console.error(error);
-      setInventoryError(error.message || "No se pudo desactivar el proveedor.");
+      setInventoryFormError(error.message || "No se pudo desactivar el proveedor.");
+    } finally {
+      setSavingSupplier(false);
     }
   };
 
-  const lowStockSupplies = supplies.filter(
+  const handleActivateSupplier = async (supplier) => {
+    if (!window.confirm(`¿Volver a activar al proveedor "${supplier.name}"?`)) {
+      return;
+    }
+
+    setSavingSupplier(true);
+    setInventoryFormError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/suppliers/${supplier.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: true })
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo activar el proveedor."));
+      }
+
+      await fetchInventory();
+      closeSupplierModal();
+      showInventorySuccess("Proveedor activado correctamente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo activar el proveedor.");
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
+
+  const handleDeleteSupplier = async (supplier) => {
+    const linkedSupplies = supplies.filter((supply) => String(supply.supplierId) === String(supplier.id));
+    const linkedMessage = linkedSupplies.length > 0
+      ? ` ${linkedSupplies.length} insumo(s) quedarán sin proveedor asignado.`
+      : "";
+
+    if (!window.confirm(`¿Eliminar permanentemente al proveedor "${supplier.name}"?${linkedMessage} Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    setSavingSupplier(true);
+    setInventoryFormError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/inventory/suppliers/${supplier.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        throw new Error(await readInventoryError(response, "No se pudo eliminar el proveedor."));
+      }
+
+      await fetchInventory();
+      closeSupplierModal();
+      showInventorySuccess("Proveedor eliminado permanentemente.");
+    } catch (error) {
+      console.error(error);
+      setInventoryFormError(error.message || "No se pudo eliminar el proveedor.");
+    } finally {
+      setSavingSupplier(false);
+    }
+  };
+
+  const activeSupplies = supplies.filter((supply) => supply.active !== false);
+  const inactiveSupplies = supplies.filter((supply) => supply.active === false);
+  const activeSuppliers = suppliers.filter((supplier) => supplier.active !== false);
+  const inactiveSuppliers = suppliers.filter((supplier) => supplier.active === false);
+
+  const lowStockSupplies = activeSupplies.filter(
     (supply) => Number(supply.stock) <= Number(supply.minimumStock)
   );
 
   const normalizedInventorySearch = inventorySearch.trim().toLowerCase();
-  const filteredInventorySupplies = supplies.filter((supply) => {
+  const supplyMatchesSearch = (supply) => {
     if (!normalizedInventorySearch) return true;
-
-    const supplierName = suppliers.find((supplier) => String(supplier.id) === String(supply.supplierId))?.name || "";
-    return `${supply.name || ""} ${supply.unit || ""} ${supplierName}`
+    return `${supply.name || ""} ${supply.unit || ""}`
       .toLowerCase()
       .includes(normalizedInventorySearch);
-  });
+  };
+  const filteredInventorySupplies = activeSupplies.filter(supplyMatchesSearch);
+  const filteredInactiveSupplies = inactiveSupplies.filter(supplyMatchesSearch);
 
-  const supplierNameForSupply = (supply) => (
-    suppliers.find((supplier) => String(supplier.id) === String(supply.supplierId))?.name || "Sin proveedor"
-  );
+  const normalizedSupplierSearch = supplierSearch.trim().toLowerCase();
+  const supplierMatchesSearch = (supplier) => {
+    if (!normalizedSupplierSearch) return true;
+    return `${supplier.name || ""} ${supplier.phone || ""} ${supplier.email || ""} ${supplier.address || ""}`
+      .toLowerCase()
+      .includes(normalizedSupplierSearch);
+  };
+  const filteredActiveSuppliers = activeSuppliers.filter(supplierMatchesSearch);
+  const filteredInactiveSuppliers = inactiveSuppliers.filter(supplierMatchesSearch);
+
+  const supplierNameForSupply = (supply) => {
+    const supplier = suppliers.find((item) => String(item.id) === String(supply.supplierId));
+    if (!supplier) return "Sin proveedor";
+    return supplier.active === false ? `${supplier.name} (desactivado)` : supplier.name;
+  };
+
+  const editingSupply = supplies.find((supply) => String(supply.id) === String(editingSupplyId)) || null;
+  const editingSupplier = suppliers.find((supplier) => String(supplier.id) === String(editingSupplierId)) || null;
 
   const handleLogin = (event) => {
     event.preventDefault();
@@ -3630,7 +3789,7 @@ function App() {
             <div className="inventory-summary-grid">
               <article className="inventory-summary-card">
                 <span>Insumos activos</span>
-                <strong>{supplies.length}</strong>
+                <strong>{activeSupplies.length}</strong>
               </article>
               <article className={`inventory-summary-card ${lowStockSupplies.length > 0 ? "inventory-summary-alert" : ""}`}>
                 <span>Stock bajo</span>
@@ -3638,7 +3797,7 @@ function App() {
               </article>
               <article className="inventory-summary-card">
                 <span>Proveedores activos</span>
-                <strong>{suppliers.length}</strong>
+                <strong>{activeSuppliers.length}</strong>
               </article>
             </div>
 
@@ -3672,7 +3831,7 @@ function App() {
                   type="search"
                   value={inventorySearch}
                   onChange={(event) => setInventorySearch(event.target.value)}
-                  placeholder="Buscar insumo o proveedor..."
+                  placeholder="Buscar insumo..."
                   aria-label="Buscar insumo"
                 />
               </div>
@@ -3681,7 +3840,7 @@ function App() {
                 <p className="inventory-empty">Cargando inventario...</p>
               ) : filteredInventorySupplies.length === 0 ? (
                 <p className="inventory-empty">
-                  {supplies.length === 0 ? "No hay insumos registrados." : "No hay insumos que coincidan con la búsqueda."}
+                  {activeSupplies.length === 0 ? "No hay insumos activos." : "No hay insumos que coincidan con la búsqueda."}
                 </p>
               ) : (
                 <div className="inventory-table-wrap">
@@ -3718,9 +3877,6 @@ function App() {
                             <button type="button" className="inventory-action-button" onClick={() => openSupplyModal(supply)}>
                               Editar
                             </button>
-                            <button type="button" className="inventory-danger-button" onClick={() => handleDeactivateSupply(supply)}>
-                              Desactivar
-                            </button>
                           </div>
                         </div>
                       );
@@ -3730,18 +3886,75 @@ function App() {
               )}
             </div>
 
+            {!loadingInventory && inactiveSupplies.length > 0 && (
+              <div className="inventory-section-card inventory-inactive-card">
+                <div className="inventory-card-heading">
+                  <div>
+                    <h3>Insumos desactivados</h3>
+                    <p>Insumos dados de baja lógica. Puedes editarlos o volver a activarlos.</p>
+                  </div>
+                </div>
+
+                {filteredInactiveSupplies.length === 0 ? (
+                  <p className="inventory-empty">No hay insumos desactivados que coincidan con la búsqueda.</p>
+                ) : (
+                  <div className="inventory-table-wrap">
+                    <div className="inventory-table inventory-supplies-table">
+                      <div className="inventory-table-row inventory-table-head">
+                        <span>Insumo</span>
+                        <span>Stock</span>
+                        <span>Mínimo</span>
+                        <span>Unidad</span>
+                        <span>Proveedor</span>
+                        <span>Estado</span>
+                        <span>Acciones</span>
+                      </div>
+
+                      {filteredInactiveSupplies.map((supply) => (
+                        <div key={supply.id} className="inventory-table-row inventory-inactive-row">
+                          <span className="inventory-name-cell">{supply.name}</span>
+                          <strong>{supply.stock}</strong>
+                          <span>{supply.minimumStock}</span>
+                          <span>{supply.unit || "—"}</span>
+                          <span>{supplierNameForSupply(supply)}</span>
+                          <span><span className="inventory-inactive-badge">Desactivado</span></span>
+                          <div className="inventory-row-actions">
+                            <button type="button" className="inventory-action-button" onClick={() => openSupplyModal(supply)}>
+                              Editar
+                            </button>
+                            <button type="button" className="inventory-activate-button" onClick={() => handleActivateSupply(supply)}>
+                              Activar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="inventory-section-card">
               <div className="inventory-card-heading">
                 <div>
                   <h3>Proveedores</h3>
                   <p>Datos de contacto para reposición de materiales.</p>
                 </div>
+                <input
+                  type="search"
+                  value={supplierSearch}
+                  onChange={(event) => setSupplierSearch(event.target.value)}
+                  placeholder="Buscar proveedor..."
+                  aria-label="Buscar proveedor"
+                />
               </div>
 
               {loadingInventory ? (
                 <p className="inventory-empty">Cargando proveedores...</p>
-              ) : suppliers.length === 0 ? (
-                <p className="inventory-empty">No hay proveedores registrados.</p>
+              ) : filteredActiveSuppliers.length === 0 ? (
+                <p className="inventory-empty">
+                  {activeSuppliers.length === 0 ? "No hay proveedores activos." : "No hay proveedores que coincidan con la búsqueda."}
+                </p>
               ) : (
                 <div className="inventory-table-wrap">
                   <div className="inventory-table inventory-suppliers-table">
@@ -3753,18 +3966,15 @@ function App() {
                       <span>Acciones</span>
                     </div>
 
-                    {suppliers.map((supplier) => (
+                    {filteredActiveSuppliers.map((supplier) => (
                       <div key={supplier.id} className="inventory-table-row">
                         <span className="inventory-name-cell">{supplier.name}</span>
-                        <span>{supplier.phone || "No registrado"}</span>
+                        <span>{formatDoctorTablePhone(supplier.phone)}</span>
                         <span className="inventory-contact-cell">{supplier.email || "No registrado"}</span>
                         <span className="inventory-contact-cell">{supplier.address || "No registrada"}</span>
                         <div className="inventory-row-actions">
                           <button type="button" className="inventory-action-button" onClick={() => openSupplierModal(supplier)}>
                             Editar
-                          </button>
-                          <button type="button" className="inventory-danger-button" onClick={() => handleDeactivateSupplier(supplier)}>
-                            Desactivar
                           </button>
                         </div>
                       </div>
@@ -3773,6 +3983,50 @@ function App() {
                 </div>
               )}
             </div>
+
+            {!loadingInventory && inactiveSuppliers.length > 0 && (
+              <div className="inventory-section-card inventory-inactive-card">
+                <div className="inventory-card-heading">
+                  <div>
+                    <h3>Proveedores desactivados</h3>
+                    <p>Proveedores dados de baja lógica. Puedes editarlos o volver a activarlos.</p>
+                  </div>
+                </div>
+
+                {filteredInactiveSuppliers.length === 0 ? (
+                  <p className="inventory-empty">No hay proveedores desactivados que coincidan con la búsqueda.</p>
+                ) : (
+                  <div className="inventory-table-wrap">
+                    <div className="inventory-table inventory-suppliers-table">
+                      <div className="inventory-table-row inventory-table-head">
+                        <span>Proveedor</span>
+                        <span>Teléfono</span>
+                        <span>Correo</span>
+                        <span>Dirección</span>
+                        <span>Acciones</span>
+                      </div>
+
+                      {filteredInactiveSuppliers.map((supplier) => (
+                        <div key={supplier.id} className="inventory-table-row inventory-inactive-row">
+                          <span className="inventory-name-cell">{supplier.name}</span>
+                          <span>{formatDoctorTablePhone(supplier.phone)}</span>
+                          <span className="inventory-contact-cell">{supplier.email || "No registrado"}</span>
+                          <span className="inventory-contact-cell">{supplier.address || "No registrada"}</span>
+                          <div className="inventory-row-actions">
+                            <button type="button" className="inventory-action-button" onClick={() => openSupplierModal(supplier)}>
+                              Editar
+                            </button>
+                            <button type="button" className="inventory-activate-button" onClick={() => handleActivateSupplier(supplier)}>
+                              Activar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -3835,13 +4089,40 @@ function App() {
                     onChange={(event) => setSupplyForm({ ...supplyForm, supplierId: event.target.value })}
                   >
                     <option value="">Sin proveedor</option>
-                    {suppliers.map((supplier) => (
-                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
-                    ))}
+                    {suppliers
+                      .filter((supplier) => supplier.active !== false || String(supplier.id) === String(supplyForm.supplierId))
+                      .map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.name}{supplier.active === false ? " (desactivado)" : ""}
+                        </option>
+                      ))}
                   </select>
                 </label>
 
                 {inventoryFormError && <p className="inventory-form-error">{inventoryFormError}</p>}
+
+                {supplyModalMode === "edit" && editingSupply && (
+                  <div className="inventory-modal-danger-zone">
+                    <div>
+                      <strong>Administración del insumo</strong>
+                      <span>Desactivar conserva el registro. Eliminar lo borra permanentemente.</span>
+                    </div>
+                    <div className="inventory-modal-danger-actions">
+                      {editingSupply.active === false ? (
+                        <button type="button" className="inventory-activate-button" disabled={savingSupply} onClick={() => handleActivateSupply(editingSupply)}>
+                          Activar
+                        </button>
+                      ) : (
+                        <button type="button" className="inventory-warning-button" disabled={savingSupply} onClick={() => handleDeactivateSupply(editingSupply)}>
+                          Desactivar
+                        </button>
+                      )}
+                      <button type="button" className="inventory-delete-button" disabled={savingSupply} onClick={() => handleDeleteSupply(editingSupply)}>
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="form-actions">
                   <button type="button" className="secondary-button" onClick={closeSupplyModal}>Cancelar</button>
@@ -3919,9 +4200,13 @@ function App() {
                 <label>
                   Teléfono
                   <input
+                    inputMode="numeric"
+                    maxLength={12}
+                    pattern="[0-9]{3}-[0-9]{4}-[0-9]{3}"
+                    title="Ingresa 10 dígitos"
                     value={supplierForm.phone}
-                    onChange={(event) => setSupplierForm({ ...supplierForm, phone: event.target.value })}
-                    placeholder="222 000 0000"
+                    onChange={(event) => setSupplierForm({ ...supplierForm, phone: formatDoctorPhoneInput(event.target.value) })}
+                    placeholder="000-0000-000"
                   />
                 </label>
 
@@ -3945,6 +4230,29 @@ function App() {
                 </label>
 
                 {inventoryFormError && <p className="inventory-form-error">{inventoryFormError}</p>}
+
+                {supplierModalMode === "edit" && editingSupplier && (
+                  <div className="inventory-modal-danger-zone">
+                    <div>
+                      <strong>Administración del proveedor</strong>
+                      <span>Desactivar conserva el registro. Eliminar lo borra permanentemente.</span>
+                    </div>
+                    <div className="inventory-modal-danger-actions">
+                      {editingSupplier.active === false ? (
+                        <button type="button" className="inventory-activate-button" disabled={savingSupplier} onClick={() => handleActivateSupplier(editingSupplier)}>
+                          Activar
+                        </button>
+                      ) : (
+                        <button type="button" className="inventory-warning-button" disabled={savingSupplier} onClick={() => handleDeactivateSupplier(editingSupplier)}>
+                          Desactivar
+                        </button>
+                      )}
+                      <button type="button" className="inventory-delete-button" disabled={savingSupplier} onClick={() => handleDeleteSupplier(editingSupplier)}>
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="form-actions">
                   <button type="button" className="secondary-button" onClick={closeSupplierModal}>Cancelar</button>
