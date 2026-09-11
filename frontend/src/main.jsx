@@ -200,6 +200,52 @@ function normalizeAppointmentStatus(status) {
   return ["LLEGO", "EN_ESPERA", "FALTO"].includes(status) ? status : "EN_ESPERA";
 }
 
+function formatPaymentMethod(method) {
+  return {
+    EFECTIVO: "Efectivo",
+    TARJETA: "Tarjeta",
+    TRANSFERENCIA: "Transferencia"
+  }[method] || method;
+}
+
+function formatPaymentDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: clinicTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+
+function formatBudgetDate(value) {
+  if (!value) return "Sin fecha";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: clinicTimeZone,
+    year: "numeric",
+    month: "long",
+    day: "2-digit"
+  }).format(date);
+}
+
+function escapePrintHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function isFutureAppointment(dateKey) {
   return dateKey > getTodayDateKey();
 }
@@ -353,15 +399,32 @@ function App() {
   const [budgets, setBudgets] = useState([]);
   const [loadingBudgets, setLoadingBudgets] = useState(false);
   const [budgetsError, setBudgetsError] = useState("");
+  const [budgetFilter, setBudgetFilter] = useState("TODOS");
+  const [budgetSearch, setBudgetSearch] = useState("");
   const [isBudgetFormOpen, setIsBudgetFormOpen] = useState(false);
   const [budgetForm, setBudgetForm] = useState({ patientId: "", treatments: [] });
   const [budgetFormError, setBudgetFormError] = useState("");
   const [savingBudget, setSavingBudget] = useState(false);
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
-  const [paymentForm, setPaymentForm] = useState({ amount: "" });
+  const [paymentForm, setPaymentForm] = useState({ amount: "", paymentMethod: "EFECTIVO" });
   const [paymentFormError, setPaymentFormError] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
   const [selectedBudgetId, setSelectedBudgetId] = useState(null);
+  const [isPaymentHistoryOpen, setIsPaymentHistoryOpen] = useState(false);
+  const [selectedHistoryBudgetId, setSelectedHistoryBudgetId] = useState(null);
+  const [paymentHistory, setPaymentHistory] = useState([]);
+  const [loadingPaymentHistory, setLoadingPaymentHistory] = useState(false);
+  const [paymentHistoryError, setPaymentHistoryError] = useState("");
+  const [cashCutPeriod, setCashCutPeriod] = useState("today");
+  const [cashCut, setCashCut] = useState({
+    paymentCount: 0,
+    total: 0,
+    cash: 0,
+    card: 0,
+    transfer: 0
+  });
+  const [loadingCashCut, setLoadingCashCut] = useState(false);
+  const [cashCutError, setCashCutError] = useState("");
   const [isAddTreatmentModalOpen, setIsAddTreatmentModalOpen] = useState(false);
   const [addTreatmentForm, setAddTreatmentForm] = useState({ name: "", price: "" });
   const [addTreatmentFormError, setAddTreatmentFormError] = useState("");
@@ -391,6 +454,30 @@ function App() {
   const [savingClinicalRecord, setSavingClinicalRecord] = useState(false);
   const [, setClockTick] = useState(0);
   const availableAppointmentTimes = getAvailableAppointmentTimes(appointmentForm.date);
+
+  const normalizedBudgetSearch = budgetSearch.trim().toLowerCase();
+
+  const searchedBudgets = budgets.filter((budget) => {
+    if (!normalizedBudgetSearch) return true;
+
+    const patientName = patients.find((patient) => patient.id === budget.patientId)?.fullName
+      || budget.patientName
+      || `Paciente #${budget.patientId}`;
+
+    return patientName.toLowerCase().includes(normalizedBudgetSearch);
+  });
+
+  const budgetCounts = {
+    TODOS: searchedBudgets.length,
+    PENDIENTE: searchedBudgets.filter((budget) => budget.status === "PENDIENTE").length,
+    PARCIAL: searchedBudgets.filter((budget) => budget.status === "PARCIAL").length,
+    PAGADO: searchedBudgets.filter((budget) => budget.status === "PAGADO").length
+  };
+
+  const filteredBudgets = searchedBudgets
+    .filter((budget) => budgetFilter === "TODOS" || budget.status === budgetFilter)
+    .slice()
+    .sort((firstBudget, secondBudget) => Number(secondBudget.id) - Number(firstBudget.id));
 
   const fetchAppointments = async () => {
     try {
@@ -456,6 +543,12 @@ function App() {
     fetchTreatments();
     fetchBudgets();
   }, []);
+
+  useEffect(() => {
+    if (isLoggedIn && activeSection === "billing") {
+      fetchCashCut(cashCutPeriod);
+    }
+  }, [isLoggedIn, activeSection, cashCutPeriod]);
 
   useEffect(() => {
     const clock = window.setInterval(() => setClockTick((tick) => tick + 1), 30000);
@@ -540,7 +633,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (isLoggedIn && (activeSection === "patients" || activeSection === "odontogram")) {
+    if (isLoggedIn && (activeSection === "patients" || activeSection === "odontogram" || activeSection === "billing")) {
       fetchPatients();
     }
   }, [isLoggedIn, activeSection]);
@@ -1114,6 +1207,242 @@ function App() {
     }
   };
 
+  const printBudgetPdf = (budget) => {
+    const patientName = patients.find((patient) => patient.id === budget.patientId)?.fullName
+      || budget.patientName
+      || `Paciente #${budget.patientId}`;
+
+    const treatmentRows = budget.treatments.map((treatment) => `
+      <tr>
+        <td>${escapePrintHtml(treatment.name)}</td>
+        <td style="text-align:right">$${Number(treatment.price).toLocaleString("es-MX")}</td>
+      </tr>
+    `).join("");
+
+    const printWindow = window.open("", "_blank", "width=900,height=700");
+
+    if (!printWindow) {
+      window.alert("El navegador bloqueó la ventana del PDF. Permite ventanas emergentes e inténtalo de nuevo.");
+      return;
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Presupuesto #${budget.id}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              margin: 0;
+              padding: 36px;
+              font-family: Arial, Helvetica, sans-serif;
+              color: #1f2937;
+              background: #ffffff;
+            }
+            .document {
+              max-width: 780px;
+              margin: 0 auto;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              gap: 24px;
+              align-items: flex-start;
+              border-bottom: 3px solid #0f766e;
+              padding-bottom: 18px;
+              margin-bottom: 24px;
+            }
+            .brand h1 {
+              margin: 0;
+              color: #0f766e;
+              font-size: 25px;
+            }
+            .brand p, .folio p {
+              margin: 5px 0 0;
+              color: #64748b;
+            }
+            .folio {
+              text-align: right;
+            }
+            .folio strong {
+              font-size: 18px;
+            }
+            .patient {
+              padding: 16px;
+              border-radius: 10px;
+              background: #f8fafc;
+              margin-bottom: 22px;
+            }
+            .patient span {
+              display: block;
+              color: #64748b;
+              font-size: 12px;
+              margin-bottom: 5px;
+            }
+            .patient strong {
+              font-size: 17px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 22px;
+            }
+            th {
+              text-align: left;
+              color: #475569;
+              background: #f1f5f9;
+            }
+            th, td {
+              padding: 12px;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .totals {
+              width: 320px;
+              margin-left: auto;
+            }
+            .total-row {
+              display: flex;
+              justify-content: space-between;
+              gap: 20px;
+              padding: 7px 0;
+            }
+            .grand-total {
+              margin-top: 6px;
+              padding-top: 12px;
+              border-top: 2px solid #0f766e;
+              font-size: 19px;
+              font-weight: 700;
+              color: #0f766e;
+            }
+            .note {
+              margin-top: 34px;
+              padding-top: 16px;
+              border-top: 1px solid #e2e8f0;
+              color: #64748b;
+              font-size: 12px;
+              line-height: 1.5;
+            }
+            @media print {
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="document">
+            <div class="header">
+              <div class="brand">
+                <h1>Clínica Odontológica</h1>
+                <p>Presupuesto de tratamiento dental</p>
+              </div>
+              <div class="folio">
+                <strong>Presupuesto #${budget.id}</strong>
+                <p>${escapePrintHtml(formatBudgetDate(budget.createdAt))}</p>
+              </div>
+            </div>
+
+            <div class="patient">
+              <span>PACIENTE</span>
+              <strong>${escapePrintHtml(patientName)}</strong>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Tratamiento</th>
+                  <th style="text-align:right">Precio</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${treatmentRows}
+              </tbody>
+            </table>
+
+            <div class="totals">
+              <div class="total-row">
+                <span>Pagado</span>
+                <strong>$${budget.paid.toLocaleString("es-MX")}</strong>
+              </div>
+              <div class="total-row">
+                <span>Saldo pendiente</span>
+                <strong>$${budget.balance.toLocaleString("es-MX")}</strong>
+              </div>
+              <div class="total-row grand-total">
+                <span>Total</span>
+                <span>$${budget.total.toLocaleString("es-MX")}</span>
+              </div>
+            </div>
+
+            <div class="note">
+              Este documento corresponde a un presupuesto de tratamientos odontológicos.
+              Los importes reflejan la información registrada al momento de su generación.
+            </div>
+          </div>
+
+          <script>
+            window.onload = () => {
+              window.focus();
+              setTimeout(() => window.print(), 250);
+            };
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  };
+
+  const fetchCashCut = async (period = cashCutPeriod) => {
+    setLoadingCashCut(true);
+    setCashCutError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/billing/cash-cut?period=${period}`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo cargar el corte de caja");
+      }
+
+      const data = await response.json();
+      setCashCut(data);
+    } catch (error) {
+      console.error(error);
+      setCashCut({
+        paymentCount: 0,
+        total: 0,
+        cash: 0,
+        card: 0,
+        transfer: 0
+      });
+      setCashCutError(error.message || "No se pudo cargar el corte de caja");
+    } finally {
+      setLoadingCashCut(false);
+    }
+  };
+
+  const fetchPaymentHistory = async (budgetId) => {
+    setLoadingPaymentHistory(true);
+    setPaymentHistoryError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/billing/budgets/${budgetId}/payments`);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo cargar el historial de pagos");
+      }
+
+      const data = await response.json();
+      setPaymentHistory(data);
+    } catch (error) {
+      console.error(error);
+      setPaymentHistory([]);
+      setPaymentHistoryError(error.message || "No se pudo cargar el historial de pagos");
+    } finally {
+      setLoadingPaymentHistory(false);
+    }
+  };
+
   const handleCreatePayment = async (event) => {
     event.preventDefault();
     setSavingPayment(true);
@@ -1130,7 +1459,8 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: Number(paymentForm.amount)
+          amount: Number(paymentForm.amount),
+          paymentMethod: paymentForm.paymentMethod
         })
       });
 
@@ -1140,8 +1470,9 @@ function App() {
       }
 
       await fetchBudgets();
+      await fetchCashCut(cashCutPeriod);
       setIsPaymentFormOpen(false);
-      setPaymentForm({ amount: "" });
+      setPaymentForm({ amount: "", paymentMethod: "EFECTIVO" });
       setSelectedBudgetId(null);
     } catch (error) {
       console.error(error);
@@ -2183,14 +2514,122 @@ function App() {
 
             {budgetsError && <p className="error-message">{budgetsError}</p>}
 
+            <div className="billing-search">
+              <input
+                type="search"
+                value={budgetSearch}
+                onChange={(event) => setBudgetSearch(event.target.value)}
+                placeholder="Buscar presupuesto por paciente..."
+                aria-label="Buscar presupuesto por paciente"
+              />
+            </div>
+
+            <div className="billing-filters">
+              <button
+                type="button"
+                className={`billing-filter-button ${budgetFilter === "TODOS" ? "active" : ""}`}
+                onClick={() => setBudgetFilter("TODOS")}
+              >
+                Todos ({budgetCounts.TODOS})
+              </button>
+
+              <button
+                type="button"
+                className={`billing-filter-button ${budgetFilter === "PENDIENTE" ? "active" : ""}`}
+                onClick={() => setBudgetFilter("PENDIENTE")}
+              >
+                Pendientes ({budgetCounts.PENDIENTE})
+              </button>
+
+              <button
+                type="button"
+                className={`billing-filter-button ${budgetFilter === "PARCIAL" ? "active" : ""}`}
+                onClick={() => setBudgetFilter("PARCIAL")}
+              >
+                Parciales ({budgetCounts.PARCIAL})
+              </button>
+
+              <button
+                type="button"
+                className={`billing-filter-button ${budgetFilter === "PAGADO" ? "active" : ""}`}
+                onClick={() => setBudgetFilter("PAGADO")}
+              >
+                Pagados ({budgetCounts.PAGADO})
+              </button>
+            </div>
+
+            <section className="cash-cut-card">
+              <div className="cash-cut-header">
+                <div>
+                  <p className="cash-cut-kicker">Ingresos registrados</p>
+                  <h3>Corte de caja</h3>
+                </div>
+
+                <div className="cash-cut-periods">
+                  <button
+                    type="button"
+                    className={`cash-cut-period-button ${cashCutPeriod === "today" ? "active" : ""}`}
+                    onClick={() => setCashCutPeriod("today")}
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    type="button"
+                    className={`cash-cut-period-button ${cashCutPeriod === "week" ? "active" : ""}`}
+                    onClick={() => setCashCutPeriod("week")}
+                  >
+                    Semana
+                  </button>
+                  <button
+                    type="button"
+                    className={`cash-cut-period-button ${cashCutPeriod === "month" ? "active" : ""}`}
+                    onClick={() => setCashCutPeriod("month")}
+                  >
+                    Mes
+                  </button>
+                </div>
+              </div>
+
+              {loadingCashCut ? (
+                <p className="cash-cut-message">Calculando corte...</p>
+              ) : cashCutError ? (
+                <p className="form-error">{cashCutError}</p>
+              ) : (
+                <div className="cash-cut-grid">
+                  <div className="cash-cut-metric cash-cut-total">
+                    <span>Ingresos totales</span>
+                    <strong>${cashCut.total.toLocaleString("es-MX")}</strong>
+                  </div>
+                  <div className="cash-cut-metric">
+                    <span>Efectivo</span>
+                    <strong>${cashCut.cash.toLocaleString("es-MX")}</strong>
+                  </div>
+                  <div className="cash-cut-metric">
+                    <span>Tarjeta</span>
+                    <strong>${cashCut.card.toLocaleString("es-MX")}</strong>
+                  </div>
+                  <div className="cash-cut-metric">
+                    <span>Transferencia</span>
+                    <strong>${cashCut.transfer.toLocaleString("es-MX")}</strong>
+                  </div>
+                  <div className="cash-cut-metric">
+                    <span>Pagos realizados</span>
+                    <strong>{cashCut.paymentCount}</strong>
+                  </div>
+                </div>
+              )}
+            </section>
+
             {loadingBudgets ? (
               <p>Cargando presupuestos...</p>
             ) : budgets.length === 0 ? (
               <p>No hay presupuestos registrados</p>
+            ) : filteredBudgets.length === 0 ? (
+              <p>No hay presupuestos que coincidan con la búsqueda o el filtro.</p>
             ) : (
               <div className="budgets-list">
-                {budgets.map((budget) => {
-                  const patientName = patients.find((p) => p.id === budget.patientId)?.fullName || `Paciente #${budget.patientId}`;
+                {filteredBudgets.map((budget) => {
+                  const patientName = patients.find((p) => p.id === budget.patientId)?.fullName || budget.patientName || `Paciente #${budget.patientId}`;
                   const canPayment = budget.balance > 0 && budget.status !== "PAGADO";
 
                   return (
@@ -2225,22 +2664,44 @@ function App() {
                         </div>
                       </div>
 
-                      {canPayment && (
-                        <div className="budget-actions">
+                      <div className="budget-actions">
+                        {canPayment && (
                           <button
                             type="button"
                             className="secondary-button"
                             onClick={() => {
                               setSelectedBudgetId(budget.id);
-                              setPaymentForm({ amount: "" });
+                              setPaymentForm({ amount: "", paymentMethod: "EFECTIVO" });
                               setPaymentFormError("");
                               setIsPaymentFormOpen(true);
                             }}
                           >
                             Registrar pago
                           </button>
-                        </div>
-                      )}
+                        )}
+
+                        <button
+                          type="button"
+                          className="history-button"
+                          onClick={() => {
+                            setSelectedHistoryBudgetId(budget.id);
+                            setPaymentHistory([]);
+                            setPaymentHistoryError("");
+                            setIsPaymentHistoryOpen(true);
+                            fetchPaymentHistory(budget.id);
+                          }}
+                        >
+                          Ver pagos
+                        </button>
+
+                        <button
+                          type="button"
+                          className="pdf-button"
+                          onClick={() => printBudgetPdf(budget)}
+                        >
+                          Generar PDF
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
@@ -2468,14 +2929,32 @@ function App() {
                 <>
                   {(() => {
                     const budget = budgets.find((b) => b.id === selectedBudgetId);
-                    return budget ? (
+                    if (!budget) return null;
+
+                    const patientName = patients.find((patient) => patient.id === budget.patientId)?.fullName
+                      || budget.patientName
+                      || `Paciente #${budget.patientId}`;
+
+                    return (
                       <div className="payment-info">
                         <div className="info-row">
+                          <span>Paciente:</span>
+                          <strong>{patientName}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>Total:</span>
+                          <strong>${budget.total.toLocaleString("es-MX")}</strong>
+                        </div>
+                        <div className="info-row">
+                          <span>Pagado:</span>
+                          <strong>${budget.paid.toLocaleString("es-MX")}</strong>
+                        </div>
+                        <div className="info-row">
                           <span>Saldo pendiente:</span>
-                          <strong>${budget.balance.toLocaleString("es-MX")}</strong>
+                          <strong className="balance-pending">${budget.balance.toLocaleString("es-MX")}</strong>
                         </div>
                       </div>
-                    ) : null;
+                    );
                   })()}
 
                   <form className="payment-form" onSubmit={handleCreatePayment}>
@@ -2493,6 +2972,18 @@ function App() {
                       />
                     </label>
 
+                    <label>
+                      Método de pago
+                      <select
+                        value={paymentForm.paymentMethod}
+                        onChange={(event) => setPaymentForm({ ...paymentForm, paymentMethod: event.target.value })}
+                      >
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TARJETA">Tarjeta</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
+                      </select>
+                    </label>
+
                     {paymentFormError && <p className="form-error">{paymentFormError}</p>}
 
                     <div className="form-actions">
@@ -2505,6 +2996,75 @@ function App() {
                     </div>
                   </form>
                 </>
+              )}
+            </div>
+          </div>
+        )}
+
+
+        {isPaymentHistoryOpen && (
+          <div className="modal-backdrop">
+            <div className="modal-card payment-history-modal">
+              <div className="section-heading">
+                <h3>Historial de pagos</h3>
+                <button
+                  type="button"
+                  className="close-button"
+                  onClick={() => {
+                    setIsPaymentHistoryOpen(false);
+                    setSelectedHistoryBudgetId(null);
+                    setPaymentHistory([]);
+                    setPaymentHistoryError("");
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              {(() => {
+                const budget = budgets.find((item) => item.id === selectedHistoryBudgetId);
+                if (!budget) return null;
+
+                const patientName = patients.find((patient) => patient.id === budget.patientId)?.fullName
+                  || budget.patientName
+                  || `Paciente #${budget.patientId}`;
+
+                return (
+                  <div className="history-budget-summary">
+                    <div>
+                      <span>Paciente</span>
+                      <strong>{patientName}</strong>
+                    </div>
+                    <div>
+                      <span>Presupuesto</span>
+                      <strong>#{budget.id}</strong>
+                    </div>
+                    <div>
+                      <span>Total pagado</span>
+                      <strong>${budget.paid.toLocaleString("es-MX")}</strong>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {loadingPaymentHistory ? (
+                <p className="payment-history-empty">Cargando pagos...</p>
+              ) : paymentHistoryError ? (
+                <p className="form-error">{paymentHistoryError}</p>
+              ) : paymentHistory.length === 0 ? (
+                <p className="payment-history-empty">Este presupuesto todavía no tiene pagos registrados.</p>
+              ) : (
+                <div className="payment-history-list">
+                  {paymentHistory.map((payment) => (
+                    <div className="payment-history-row" key={payment.id}>
+                      <div>
+                        <strong>${payment.amount.toLocaleString("es-MX")}</strong>
+                        <span>{formatPaymentMethod(payment.paymentMethod)}</span>
+                      </div>
+                      <time>{formatPaymentDate(payment.createdAt)}</time>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

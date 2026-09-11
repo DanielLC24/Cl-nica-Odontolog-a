@@ -81,8 +81,14 @@ async function initializeDatabase() {
       id SERIAL PRIMARY KEY,
       budget_id INTEGER NOT NULL REFERENCES budgets(id) ON DELETE CASCADE,
       amount DECIMAL(10, 2) NOT NULL,
+      payment_method VARCHAR(30) NOT NULL DEFAULT 'EFECTIVO',
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
+  `);
+
+  await query(`
+    ALTER TABLE payments
+    ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) NOT NULL DEFAULT 'EFECTIVO'
   `);
 
   const existing = await query("SELECT COUNT(*) FROM treatments");
@@ -103,6 +109,10 @@ async function initializeDatabase() {
 
 function isValidId(id) {
   return !Number.isNaN(Number(id)) && Number(id) > 0;
+}
+
+function normalizePaymentMethod(value) {
+  return String(value || "EFECTIVO").trim().toUpperCase();
 }
 
 app.get("/health", (_req, res) => {
@@ -185,16 +195,17 @@ app.get("/budgets", async (_req, res, next) => {
         b.total,
         b.paid,
         b.status,
+        b.created_at as "createdAt",
         COALESCE(b.total - b.paid, 0) as balance,
         COALESCE(json_agg(json_build_object('id', t.id, 'name', t.name, 'price', t.price)) 
           FILTER (WHERE t.id IS NOT NULL), '[]'::json) as treatments
       FROM budgets b
       LEFT JOIN budget_treatments bt ON b.id = bt.budget_id
       LEFT JOIN treatments t ON bt.treatment_id = t.id
-      GROUP BY b.id, b.patient_id, b.total, b.paid, b.status
+      GROUP BY b.id, b.patient_id, b.total, b.paid, b.status, b.created_at
       ORDER BY b.id DESC
     `);
-    
+
     res.json(result.rows.map((row) => ({
       id: row.id,
       patientId: row.patientId,
@@ -202,6 +213,7 @@ app.get("/budgets", async (_req, res, next) => {
       paid: Number(row.paid),
       balance: Number(row.balance),
       status: row.status,
+      createdAt: row.createdAt,
       treatments: row.treatments
     })));
   } catch (error) {
@@ -249,11 +261,89 @@ app.post("/budgets", async (req, res, next) => {
       paid: 0,
       balance: Number(total),
       status: "PENDIENTE",
+      createdAt: budgetResult.rows[0].created_at,
       treatments: treatmentsResult.rows.map((row) => ({
         id: row.id,
         price: Number(row.price)
       }))
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+
+app.get("/cash-cut", async (req, res, next) => {
+  try {
+    const period = String(req.query.period || "today").toLowerCase();
+
+    const startByPeriod = {
+      today: "date_trunc('day', timezone('America/Mexico_City', now()))",
+      week: "date_trunc('week', timezone('America/Mexico_City', now()))",
+      month: "date_trunc('month', timezone('America/Mexico_City', now()))"
+    };
+
+    if (!startByPeriod[period]) {
+      return res.status(400).json({ message: "Periodo no válido. Usa today, week o month" });
+    }
+
+    const result = await query(`
+      SELECT
+        COUNT(*)::integer AS payment_count,
+        COALESCE(SUM(amount), 0) AS total,
+        COALESCE(SUM(CASE WHEN payment_method = 'EFECTIVO' THEN amount ELSE 0 END), 0) AS cash,
+        COALESCE(SUM(CASE WHEN payment_method = 'TARJETA' THEN amount ELSE 0 END), 0) AS card,
+        COALESCE(SUM(CASE WHEN payment_method = 'TRANSFERENCIA' THEN amount ELSE 0 END), 0) AS transfer
+      FROM payments
+      WHERE (
+        created_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/Mexico_City'
+      ) >= ${startByPeriod[period]}
+    `);
+
+    const row = result.rows[0];
+
+    res.json({
+      period,
+      paymentCount: Number(row.payment_count),
+      total: Number(row.total),
+      cash: Number(row.cash),
+      card: Number(row.card),
+      transfer: Number(row.transfer)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/budgets/:id/payments", async (req, res, next) => {
+  try {
+    if (!isValidId(req.params.id)) {
+      return res.status(400).json({ message: "El id del presupuesto debe ser numérico" });
+    }
+
+    const budgetResult = await query(
+      "SELECT id FROM budgets WHERE id = $1",
+      [req.params.id]
+    );
+
+    if (budgetResult.rowCount === 0) {
+      return res.status(404).json({ message: "Presupuesto no encontrado" });
+    }
+
+    const paymentsResult = await query(
+      `SELECT id, amount, payment_method, created_at
+       FROM payments
+       WHERE budget_id = $1
+       ORDER BY created_at DESC, id DESC`,
+      [req.params.id]
+    );
+
+    res.json(paymentsResult.rows.map((row) => ({
+      id: row.id,
+      amount: Number(row.amount),
+      paymentMethod: row.payment_method,
+      createdAt: row.created_at
+    })));
   } catch (error) {
     next(error);
   }
@@ -266,9 +356,15 @@ app.post("/budgets/:id/payments", async (req, res, next) => {
     }
 
     const amount = Number(req.body.amount || 0);
+    const paymentMethod = normalizePaymentMethod(req.body.paymentMethod);
+    const allowedPaymentMethods = ["EFECTIVO", "TARJETA", "TRANSFERENCIA"];
 
     if (amount <= 0) {
       return res.status(400).json({ message: "El monto del pago debe ser mayor a 0" });
+    }
+
+    if (!allowedPaymentMethods.includes(paymentMethod)) {
+      return res.status(400).json({ message: "Método de pago no válido" });
     }
 
     const budgetResult = await query(
@@ -284,15 +380,15 @@ app.post("/budgets/:id/payments", async (req, res, next) => {
     const pendingBalance = Number(budget.total) - Number(budget.paid);
 
     if (amount > pendingBalance) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: "El monto del pago no puede exceder el saldo pendiente",
         balance: pendingBalance
       });
     }
 
     await query(
-      "INSERT INTO payments (budget_id, amount) VALUES ($1, $2)",
-      [req.params.id, amount]
+      "INSERT INTO payments (budget_id, amount, payment_method) VALUES ($1, $2, $3)",
+      [req.params.id, amount, paymentMethod]
     );
 
     const newPaid = Number(budget.paid) + amount;
