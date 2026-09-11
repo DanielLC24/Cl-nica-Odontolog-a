@@ -38,10 +38,13 @@ const toothNames = {
   32: "Inc. Central"
 };
 
-const teeth = Array.from({ length: 32 }, (_, index) => {
+const upperTeeth = Array.from({ length: 16 }, (_, index) => {
   const id = index + 1;
-  const states = ["Sano", "Sano", "Sano", "Caries", "Endodoncia"];
-  return { id, state: states[index % states.length], name: toothNames[id] };
+  return { id, name: toothNames[id] };
+});
+const lowerTeeth = Array.from({ length: 16 }, (_, index) => {
+  const id = index + 17;
+  return { id, name: toothNames[id] };
 });
 
 const navItems = [
@@ -423,6 +426,31 @@ function ToothLogo() {
         />
       </svg>
     </span>
+  );
+}
+
+function OdontogramTooth({ tooth, status, disabled, onClick }) {
+  return (
+    <button
+      className={`tooth ${String(status).toLowerCase()}`}
+      type="button"
+      disabled={disabled}
+      title={`${tooth.id} - ${tooth.name}: ${status}`}
+      onClick={onClick}
+    >
+      <span className="tooth-number">{tooth.id}</span>
+      <svg className="tooth-svg" viewBox="0 0 64 82" aria-hidden="true" focusable="false">
+        <path
+          className="tooth-enamel"
+          d="M17.5 7.8c5.7-3.7 10.6.8 14.5.8s8.8-4.5 14.5-.8c8.2 5.4 9.8 19.3 4.1 30.5-2 3.9-3 8.5-3.9 13.2-1.6 8.6-3.2 18.4-9.3 18.4-4.2 0-4.9-8.6-5.4-15.4-.5 6.8-1.2 15.4-5.4 15.4-6.1 0-7.7-9.8-9.3-18.4-.9-4.7-1.9-9.3-3.9-13.2C7.7 27.1 9.3 13.2 17.5 7.8Z"
+        />
+        <path className="tooth-groove" d="M22 22c3.8-2.7 7.1-2.5 10 0 2.9-2.5 6.2-2.7 10 0" />
+        <path className="tooth-root-line" d="M32 36c-2.2 6.8-2.4 13.9-2.8 21.1" />
+        <path className="tooth-root-line" d="M32 36c2.2 6.8 2.4 13.9 2.8 21.1" />
+      </svg>
+      <span className="tooth-name">{tooth.name}</span>
+      <span className="tooth-status">{status}</span>
+    </button>
   );
 }
 
@@ -3299,52 +3327,44 @@ function App() {
                   <span><i className="legend-dot legend-extraccion" />Extracción</span>
                 </div>
 
-                <div className="odontogram-arches">
-                  <div className="odontogram-zone">
+                <div className="odontogram-diagram odontogram-grouped" aria-label="Odontograma adulto agrupado">
+                  <div className="odontogram-zone odontogram-zone-upper">
                     <div className="odontogram-zone-title">
                       <span>Arcada superior</span>
                     </div>
-                    <div className="odontogram-grid upper-grid">
-                      {teeth.slice(0, 16).map((tooth) => {
+                    <div className="odontogram-row upper-arch">
+                      {upperTeeth.map((tooth) => {
                         const toothRecord = odontogram.find((item) => item.toothId === String(tooth.id));
                         const status = toothRecord?.status || "SANO";
                         return (
-                          <button
-                            className={`tooth ${String(status).toLowerCase()}`}
-                            type="button"
+                          <OdontogramTooth
                             key={tooth.id}
+                            tooth={tooth}
+                            status={status}
                             disabled={savingOdontogramTooth || !selectedOdontogramPatientId}
-                            title={`${tooth.name}: ${status}`}
                             onClick={() => saveOdontogramTooth(tooth.id)}
-                          >
-                            <span className="tooth-name">{tooth.name}</span>
-                            <span className="tooth-status">{status}</span>
-                          </button>
+                          />
                         );
                       })}
                     </div>
                   </div>
 
-                  <div className="odontogram-zone">
+                  <div className="odontogram-zone odontogram-zone-lower">
                     <div className="odontogram-zone-title">
                       <span>Arcada inferior</span>
                     </div>
-                    <div className="odontogram-grid lower-grid">
-                      {teeth.slice(16, 32).map((tooth) => {
+                    <div className="odontogram-row lower-arch">
+                      {lowerTeeth.map((tooth) => {
                         const toothRecord = odontogram.find((item) => item.toothId === String(tooth.id));
                         const status = toothRecord?.status || "SANO";
                         return (
-                          <button
-                            className={`tooth ${String(status).toLowerCase()}`}
-                            type="button"
+                          <OdontogramTooth
                             key={tooth.id}
+                            tooth={tooth}
+                            status={status}
                             disabled={savingOdontogramTooth || !selectedOdontogramPatientId}
-                            title={`${tooth.name}: ${status}`}
                             onClick={() => saveOdontogramTooth(tooth.id)}
-                          >
-                            <span className="tooth-name">{tooth.name}</span>
-                            <span className="tooth-status">{status}</span>
-                          </button>
+                          />
                         );
                       })}
                     </div>
