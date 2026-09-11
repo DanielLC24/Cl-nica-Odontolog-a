@@ -21,6 +21,7 @@ services:
       ODONTOGRAM_SERVICE_URL: http://odontogram-service:3004
       BILLING_SERVICE_URL: http://billing-service:3005
       INVENTORY_SERVICE_URL: http://inventory-service:3007
+      NOTIFICATIONS_SERVICE_URL: http://notifications-service:3008
     depends_on:
       - auth-service
       - patients-service
@@ -29,6 +30,7 @@ services:
       - odontogram-service
       - billing-service
       - inventory-service
+      - notifications-service
 
   auth-service:
     build: ./services/auth-service
@@ -101,6 +103,22 @@ services:
     depends_on:
       - inventory-db
 
+  notifications-service:
+    build: ./services/notifications-service
+    ports:
+      - "3008:3008"
+    environment:
+      PORT: 3008
+      DATABASE_URL: postgres://notifications_user:notifications_pass@notifications-db:5432/notifications_db
+      APPOINTMENTS_SERVICE_URL: http://appointments-service:3003
+      PATIENTS_SERVICE_URL: http://patients-service:3002
+      REMINDER_HOURS_BEFORE: 24
+      NOTIFICATION_SCAN_INTERVAL_MS: 300000
+    depends_on:
+      - notifications-db
+      - appointments-service
+      - patients-service
+
   auth-db:
     image: postgres:16-alpine
     environment:
@@ -164,6 +182,15 @@ services:
     volumes:
       - inventory-data:/var/lib/postgresql/data
 
+  notifications-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: notifications_user
+      POSTGRES_PASSWORD: notifications_pass
+      POSTGRES_DB: notifications_db
+    volumes:
+      - notifications-data:/var/lib/postgresql/data
+
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -189,4 +216,5 @@ volumes:
   odontogram-data:
   billing-data:
   inventory-data:
+  notifications-data:
   minio-data:

@@ -490,6 +490,19 @@ function App() {
   });
   const [loadingCashCut, setLoadingCashCut] = useState(false);
   const [cashCutError, setCashCutError] = useState("");
+  const [notificationSummary, setNotificationSummary] = useState({
+    total: 0,
+    sent: 0,
+    skipped: 0,
+    whatsapp: 0,
+    sms: 0,
+    email: 0,
+    lastSentAt: null
+  });
+  const [notificationReminders, setNotificationReminders] = useState([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
+  const [scanningNotifications, setScanningNotifications] = useState(false);
   const [isAddTreatmentModalOpen, setIsAddTreatmentModalOpen] = useState(false);
   const [addTreatmentForm, setAddTreatmentForm] = useState({ name: "", price: "" });
   const [addTreatmentFormError, setAddTreatmentFormError] = useState("");
@@ -660,6 +673,7 @@ function App() {
       fetchPatients();
       fetchInventory();
       fetchCashCut("today");
+      fetchNotifications();
     }
   }, [isLoggedIn, activeSection]);
 
@@ -1856,7 +1870,7 @@ function App() {
           <div class="document">
             <div class="header">
               <div class="brand">
-                <h1>Clínica Odontológica</h1>
+                <h1>One Last Care</h1>
                 <p>Presupuesto de tratamiento dental</p>
               </div>
               <div class="folio">
@@ -1941,6 +1955,65 @@ function App() {
       setCashCutError(error.message || "No se pudo cargar el corte de caja");
     } finally {
       setLoadingCashCut(false);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    setNotificationError("");
+
+    try {
+      const [summaryResponse, remindersResponse] = await Promise.all([
+        fetch("http://localhost:3000/api/notifications/summary"),
+        fetch("http://localhost:3000/api/notifications/reminders")
+      ]);
+
+      if (!summaryResponse.ok || !remindersResponse.ok) {
+        throw new Error("No se pudo cargar el estado de recordatorios");
+      }
+
+      const [summaryData, remindersData] = await Promise.all([
+        summaryResponse.json(),
+        remindersResponse.json()
+      ]);
+
+      setNotificationSummary(summaryData);
+      setNotificationReminders(remindersData.slice(0, 5));
+    } catch (error) {
+      console.error(error);
+      setNotificationError(error.message || "No se pudo cargar el estado de recordatorios");
+      setNotificationSummary({
+        total: 0,
+        sent: 0,
+        skipped: 0,
+        whatsapp: 0,
+        sms: 0,
+        email: 0,
+        lastSentAt: null
+      });
+      setNotificationReminders([]);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleScanNotifications = async () => {
+    setScanningNotifications(true);
+    setNotificationError("");
+
+    try {
+      const response = await fetch("http://localhost:3000/api/notifications/scan", { method: "POST" });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo ejecutar la revisión de recordatorios");
+      }
+
+      await fetchNotifications();
+    } catch (error) {
+      console.error(error);
+      setNotificationError(error.message || "No se pudo ejecutar la revisión de recordatorios");
+    } finally {
+      setScanningNotifications(false);
     }
   };
 
@@ -2203,7 +2276,7 @@ function App() {
           <div className="login-brand">
             <ToothLogo />
             <div>
-              <strong>Clínica Odontológica</strong>
+              <strong>One Last Care</strong>
               <span>Panel administrativo</span>
             </div>
           </div>
@@ -2255,8 +2328,7 @@ function App() {
         <div className="brand">
           <ToothLogo />
           <div>
-            <strong>Clinica odontologica</strong>
-            {/*<span>Clinica odontologica</span>*/}
+            <strong>One Last Care</strong>
           </div>
         </div>
 
@@ -2279,7 +2351,7 @@ function App() {
         <header className="topbar">
           <div>
             <p>{userRole}</p>
-            <h1>Panel de clinica odontologica</h1>
+            <h1>Panel de One Last Care</h1>
           </div>
           <button type="button" className="primary-button" onClick={openAppointmentForm}>Nueva cita</button>
         </header>
@@ -2424,6 +2496,63 @@ function App() {
                       </button>
                     ))}
                   </div>
+                )}
+              </div>
+
+              <div className="panel dashboard-card">
+                <div className="section-heading dashboard-card-heading">
+                  <div>
+                    <h2>Recordatorios automáticos</h2>
+                    <p className="section-subtitle">WhatsApp, SMS y email 24 horas antes.</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleScanNotifications}
+                    disabled={scanningNotifications}
+                  >
+                    {scanningNotifications ? "Revisando..." : "Revisar ahora"}
+                  </button>
+                </div>
+
+                {notificationError ? <p className="form-error">{notificationError}</p> : null}
+                {loadingNotifications ? (
+                  <p className="dashboard-empty">Cargando recordatorios...</p>
+                ) : (
+                  <>
+                    <div className="dashboard-notification-grid">
+                      <div>
+                        <span>Enviados</span>
+                        <strong>{notificationSummary.sent}</strong>
+                      </div>
+                      <div>
+                        <span>WhatsApp</span>
+                        <strong>{notificationSummary.whatsapp}</strong>
+                      </div>
+                      <div>
+                        <span>SMS</span>
+                        <strong>{notificationSummary.sms}</strong>
+                      </div>
+                      <div>
+                        <span>Email</span>
+                        <strong>{notificationSummary.email}</strong>
+                      </div>
+                    </div>
+
+                    {notificationReminders.length === 0 ? (
+                      <p className="dashboard-empty">Aún no hay recordatorios enviados.</p>
+                    ) : (
+                      <div className="dashboard-reminder-list">
+                        {notificationReminders.map((reminder) => (
+                          <div className={`dashboard-reminder-row ${reminder.status.toLowerCase()}`} key={reminder.id}>
+                            <strong>{reminder.channel}</strong>
+                            <span>{reminder.recipient || "Sin contacto"}</span>
+                            <small>{reminder.status === "SENT" ? "Enviado" : "Omitido"}</small>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 

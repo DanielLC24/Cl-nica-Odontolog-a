@@ -534,25 +534,71 @@ input {
   margin-top: 14px;
 }
 
-.dashboard-money-grid div {
+.dashboard-money-grid div,
+.dashboard-notification-grid div {
   padding: 12px;
   border-radius: 8px;
   background: #f8fafc;
 }
 
 .dashboard-money-grid span,
-.dashboard-money-grid strong {
+.dashboard-money-grid strong,
+.dashboard-notification-grid span,
+.dashboard-notification-grid strong {
   display: block;
 }
 
-.dashboard-money-grid span {
+.dashboard-money-grid span,
+.dashboard-notification-grid span {
   color: #667085;
   font-size: 0.82rem;
 }
 
-.dashboard-money-grid strong {
+.dashboard-money-grid strong,
+.dashboard-notification-grid strong {
   color: #111827;
   font-size: 1.2rem;
+}
+
+.dashboard-notification-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dashboard-reminder-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dashboard-reminder-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dashboard-reminder-row.sent {
+  border-left: 4px solid #22c55e;
+}
+
+.dashboard-reminder-row.skipped {
+  border-left: 4px solid #f59e0b;
+}
+
+.dashboard-reminder-row span,
+.dashboard-reminder-row small {
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-reminder-row small {
+  font-weight: 800;
 }
 
 .dashboard-patient-alert-list button {
