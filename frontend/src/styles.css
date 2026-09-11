@@ -3116,10 +3116,34 @@ textarea:focus {
   background:
     linear-gradient(180deg, rgba(16, 42, 67, 0.98) 0%, rgba(12, 58, 82, 0.98) 58%, rgba(4, 123, 114, 0.96) 100%);
   box-shadow: 12px 0 30px rgba(16, 42, 67, 0.12);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
 }
 
 .sidebar .brand strong {
   color: #ffffff;
+}
+
+.sidebar .brand {
+  gap: 16px;
+  margin-bottom: 46px;
+}
+
+.sidebar .brand .tooth-logo {
+  width: 58px;
+  height: 58px;
+}
+
+.sidebar .brand .tooth-logo svg {
+  width: 50px;
+  height: 50px;
+}
+
+.sidebar .brand strong {
+  font-size: 1.15rem;
+  line-height: 1.1;
 }
 
 .nav-item {
@@ -3320,6 +3344,127 @@ textarea:focus {
 .budget-status.status-parcial {
   background: #fffbeb;
   color: #92400e;
+}
+
+.login-hero-brand {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+  text-align: center;
+}
+
+.login-hero-mark {
+  width: min(188px, 56vw);
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 18px 22px rgba(0, 168, 150, 0.18));
+}
+
+.login-mark-tooth {
+  fill: #ffffff;
+  stroke: var(--olc-teal-dark);
+  stroke-width: 5.5;
+  stroke-linejoin: round;
+  transform-origin: 50% 48%;
+  animation: login-tooth-float 3.4s ease-in-out infinite;
+}
+
+.login-mark-tooth-line {
+  fill: none;
+  stroke: var(--olc-teal);
+  stroke-width: 5;
+  stroke-linecap: round;
+  animation: login-line-glow 2.8s ease-in-out infinite;
+}
+
+.login-mark-stethoscope {
+  fill: none;
+  stroke: #9bcf3a;
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 465;
+  stroke-dashoffset: 465;
+  animation: login-stethoscope-draw 1.4s ease-out forwards, login-stethoscope-breathe 3.6s ease-in-out 1.4s infinite;
+}
+
+.login-mark-node {
+  fill: #9bcf3a;
+  stroke: #ffffff;
+  stroke-width: 4;
+  animation: login-node-pulse 2.4s ease-in-out infinite;
+}
+
+.login-hero-title {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  line-height: 1;
+}
+
+.login-hero-title strong {
+  color: var(--olc-teal-dark);
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.login-hero-title span {
+  color: #8dc63f;
+  font-size: clamp(1.35rem, 3.8vw, 2rem);
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+@keyframes login-tooth-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+
+  50% {
+    transform: translateY(-7px) rotate(1deg);
+  }
+}
+
+@keyframes login-line-glow {
+  0%,
+  100% {
+    stroke: var(--olc-teal);
+  }
+
+  50% {
+    stroke: #38bdf8;
+  }
+}
+
+@keyframes login-stethoscope-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes login-stethoscope-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+@keyframes login-node-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.12);
+  }
 }
 
 @media (max-width: 900px) {
