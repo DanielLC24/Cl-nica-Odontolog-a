@@ -17,7 +17,7 @@ const pool = new Pool({
 
 app.use(cors());
 app.use(morgan("dev"));
-app.use(express.json());
+app.use(express.json({ limit: "8mb" }));
 
 async function query(text, params = []) {
   return pool.query(text, params);
@@ -67,6 +67,19 @@ async function initializeDatabase() {
       current_medications TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS patient_photos (
+      id SERIAL PRIMARY KEY,
+      patient_id INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+      category VARCHAR(40) NOT NULL DEFAULT 'Radiografía',
+      file_name VARCHAR(255) NOT NULL,
+      file_type VARCHAR(120),
+      file_size INTEGER NOT NULL DEFAULT 0,
+      data_url TEXT NOT NULL,
+      uploaded_at TIMESTAMP NOT NULL DEFAULT NOW()
     );
   `);
 
@@ -156,6 +169,19 @@ function mapClinicalRecord(row) {
     currentMedications: row.current_medications,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapPatientPhoto(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    category: row.category,
+    name: row.file_name,
+    type: row.file_type,
+    size: row.file_size,
+    dataUrl: row.data_url,
+    uploadedAt: row.uploaded_at
   };
 }
 
@@ -277,6 +303,66 @@ app.put("/:id/clinical-record", async (req, res, next) => {
     }
 
     res.json(mapClinicalRecord(result.rows[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/:id/photos", async (req, res, next) => {
+  try {
+    const patient = await query("SELECT id FROM patients WHERE id = $1", [req.params.id]);
+    if (patient.rowCount === 0) {
+      return res.status(404).json({ message: "Paciente no encontrado" });
+    }
+
+    const result = await query(
+      "SELECT * FROM patient_photos WHERE patient_id = $1 ORDER BY uploaded_at DESC, id DESC",
+      [req.params.id]
+    );
+
+    res.json(result.rows.map(mapPatientPhoto));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/:id/photos", async (req, res, next) => {
+  try {
+    const patient = await query("SELECT id FROM patients WHERE id = $1", [req.params.id]);
+    if (patient.rowCount === 0) {
+      return res.status(404).json({ message: "Paciente no encontrado" });
+    }
+
+    const { category = "Radiografía", name, type, size = 0, dataUrl } = req.body;
+    if (!name || !dataUrl) {
+      return res.status(400).json({ message: "Nombre y archivo de imagen son obligatorios" });
+    }
+
+    const result = await query(
+      `INSERT INTO patient_photos (patient_id, category, file_name, file_type, file_size, data_url)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [req.params.id, category, name, type || null, Number(size) || 0, dataUrl]
+    );
+
+    res.status(201).json(mapPatientPhoto(result.rows[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/:id/photos/:photoId", async (req, res, next) => {
+  try {
+    const result = await query(
+      "DELETE FROM patient_photos WHERE patient_id = $1 AND id = $2 RETURNING id",
+      [req.params.id, req.params.photoId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Foto no encontrada" });
+    }
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

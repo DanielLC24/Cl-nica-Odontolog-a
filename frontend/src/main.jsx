@@ -125,7 +125,6 @@ const emptySupplierForm = {
 };
 
 const odontogramStatuses = ["SANO", "CARIES", "ENDODONCIA", "EXTRACCION"];
-const patientPhotosStorageKey = "clinica_patient_photos_v1";
 const maxPatientPhotoSize = 4 * 1024 * 1024;
 const patientPhotoTypes = ["Antes", "Después", "Radiografía"];
 
@@ -149,12 +148,6 @@ function formatDoctorTablePhone(phone) {
   }
   return phone;
 }
-
-const validCredentials = {
-  "admin@clinica.test": "admin123",
-  "doctor@clinica.test": "doctor123",
-  "recepcion@clinica.test": "recepcion123"
-};
 
 function dateFromKey(dateKey) {
   const [year, month, day] = dateKey.split("-").map(Number);
@@ -480,6 +473,7 @@ function App() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [loginForm, setLoginForm] = useState({ email: "admin@clinica.test", password: "admin123" });
   const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
   const [patients, setPatients] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(false);
   const [doctors, setDoctors] = useState([]);
@@ -578,13 +572,8 @@ function App() {
   const [savingPatient, setSavingPatient] = useState(false);
   const [clinicalRecordForm, setClinicalRecordForm] = useState(emptyClinicalRecordForm);
   const [savingClinicalRecord, setSavingClinicalRecord] = useState(false);
-  const [patientPhotos, setPatientPhotos] = useState(() => {
-    try {
-      return JSON.parse(window.localStorage.getItem(patientPhotosStorageKey)) || {};
-    } catch {
-      return {};
-    }
-  });
+  const [patientPhotos, setPatientPhotos] = useState([]);
+  const [loadingPatientPhotos, setLoadingPatientPhotos] = useState(false);
   const [photoUploadError, setPhotoUploadError] = useState("");
   const [selectedPhotoType, setSelectedPhotoType] = useState(patientPhotoTypes[0]);
 
@@ -640,17 +629,6 @@ function App() {
     .filter((budget) => budgetFilter === "TODOS" || budget.status === budgetFilter)
     .slice()
     .sort((firstBudget, secondBudget) => Number(secondBudget.id) - Number(firstBudget.id));
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(patientPhotosStorageKey, JSON.stringify(patientPhotos));
-      setPhotoUploadError((current) => (
-        current === "No hay espacio suficiente en este navegador para guardar más fotos." ? "" : current
-      ));
-    } catch {
-      setPhotoUploadError("No hay espacio suficiente en este navegador para guardar más fotos.");
-    }
-  }, [patientPhotos]);
 
   const fetchAppointments = async () => {
     try {
@@ -1157,12 +1135,42 @@ function App() {
     .slice(0, 4);
 
   const selectedPatientPhotos = useMemo(() => {
-    if (!selectedPatientDetail?.id) {
-      return [];
+    return selectedPatientDetail?.id ? patientPhotos : [];
+  }, [patientPhotos, selectedPatientDetail]);
+
+  const fetchPatientPhotos = async (patientId) => {
+    if (!patientId) {
+      setPatientPhotos([]);
+      return;
     }
 
-    return patientPhotos[String(selectedPatientDetail.id)] || [];
-  }, [patientPhotos, selectedPatientDetail]);
+    setLoadingPatientPhotos(true);
+    setPhotoUploadError("");
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/patients/${patientId}/photos`);
+      if (!response.ok) {
+        throw new Error("No se pudieron cargar las fotos del expediente.");
+      }
+
+      const data = await response.json();
+      setPatientPhotos(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      setPatientPhotos([]);
+      setPhotoUploadError(error.message || "No se pudieron cargar las fotos del expediente.");
+    } finally {
+      setLoadingPatientPhotos(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedPatientDetail?.id) {
+      fetchPatientPhotos(selectedPatientDetail.id);
+    } else {
+      setPatientPhotos([]);
+    }
+  }, [selectedPatientDetail?.id]);
 
   useEffect(() => {
     if (selectedPatient && !filteredPatients.some((patient) => patient.id === selectedPatient.id)) {
@@ -1196,11 +1204,24 @@ function App() {
         category: selectedPhotoType
       }));
       const patientId = String(selectedPatientDetail.id);
+      const savedPhotos = [];
 
-      setPatientPhotos((current) => ({
-        ...current,
-        [patientId]: [...(current[patientId] || []), ...uploadedPhotos]
-      }));
+      for (const photo of uploadedPhotos) {
+        const response = await fetch(`http://localhost:3000/api/patients/${patientId}/photos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(photo)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || "No se pudo guardar la foto en el servidor.");
+        }
+
+        savedPhotos.push(await response.json());
+      }
+
+      setPatientPhotos((current) => [...savedPhotos, ...current]);
       setPhotoUploadError("");
     } catch (error) {
       console.error(error);
@@ -1208,16 +1229,27 @@ function App() {
     }
   };
 
-  const removePatientPhoto = (photoId) => {
+  const removePatientPhoto = async (photoId) => {
     if (!selectedPatientDetail?.id) {
       return;
     }
 
-    const patientId = String(selectedPatientDetail.id);
-    setPatientPhotos((current) => ({
-      ...current,
-      [patientId]: (current[patientId] || []).filter((photo) => photo.id !== photoId)
-    }));
+    try {
+      const response = await fetch(`http://localhost:3000/api/patients/${selectedPatientDetail.id}/photos/${photoId}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "No se pudo eliminar la foto del servidor.");
+      }
+
+      setPatientPhotos((current) => current.filter((photo) => photo.id !== photoId));
+      setPhotoUploadError("");
+    } catch (error) {
+      console.error(error);
+      setPhotoUploadError(error.message || "No se pudo eliminar la foto.");
+    }
   };
 
   const fetchInventory = async () => {
@@ -1703,24 +1735,41 @@ function App() {
   const editingSupply = supplies.find((supply) => String(supply.id) === String(editingSupplyId)) || null;
   const editingSupplier = suppliers.find((supplier) => String(supplier.id) === String(editingSupplierId)) || null;
 
-  const handleLogin = (event) => {
+  const handleLogin = async (event) => {
     event.preventDefault();
     const { email, password } = loginForm;
 
-    if (validCredentials[email] === password) {
+    setLoggingIn(true);
+    setLoginError("");
+
+    try {
+      const response = await fetch("http://localhost:3000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Credenciales incorrectas. Usa uno de los usuarios demo.");
+      }
+
+      const data = await response.json();
       const roleMap = {
-        "admin@clinica.test": "Administrador",
-        "doctor@clinica.test": "Doctor",
-        "recepcion@clinica.test": "Recepcionista"
+        ADMIN: "Administrador",
+        DOCTOR: "Doctor",
+        RECEPCIONISTA: "Recepcionista"
       };
 
-      setUserRole(roleMap[email]);
+      setUserRole(roleMap[data.user?.role] || data.user?.name || "Usuario");
       setIsLoggedIn(true);
       setLoginError("");
-      return;
+    } catch (error) {
+      console.error(error);
+      setLoginError(error.message || "No se pudo iniciar sesión. Verifica que el servidor esté disponible.");
+    } finally {
+      setLoggingIn(false);
     }
-
-    setLoginError("Credenciales incorrectas. Usa uno de los usuarios demo.");
   };
 
   const openCreateForm = () => {
@@ -2507,7 +2556,9 @@ function App() {
 
             {loginError ? <p className="login-error">{loginError}</p> : null}
 
-            <button type="submit" className="login-button">Entrar</button>
+            <button type="submit" className="login-button" disabled={loggingIn}>
+              {loggingIn ? "Entrando..." : "Entrar"}
+            </button>
           </form>
 
           <div className="demo-users">
@@ -2930,7 +2981,9 @@ function App() {
                         </div>
                         <p className="photo-type-helper">Las próximas imágenes se guardarán como: <strong>{selectedPhotoType}</strong>.</p>
                         {photoUploadError ? <p className="photo-upload-error">{photoUploadError}</p> : null}
-                        {selectedPatientPhotos.length > 0 ? (
+                        {loadingPatientPhotos ? (
+                          <p className="photo-history-empty">Cargando fotos del servidor...</p>
+                        ) : selectedPatientPhotos.length > 0 ? (
                           <div className="photo-history-gallery">
                             {selectedPatientPhotos.map((photo) => (
                               <article className="photo-history-item" key={photo.id}>
